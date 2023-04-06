@@ -9,6 +9,5 @@ const exclude_paths = [
 
 func run():
 	Coverage.new(gut.get_tree(), exclude_paths) \
-		.instrument_autoloads() \
-		.instrument_scripts("res://") \
+		.instrument_scripts("res://", true) \
 		.enforce_node_coverage()

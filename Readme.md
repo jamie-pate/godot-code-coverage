@@ -36,11 +36,12 @@ See this project's `tests/pre_run_hook.gd`, `tests/post_run_hook.gd` and `.gutco
     * `exclude_paths` is a list of resource paths to be skipped when instrumenting files. It follows the [`String.match`](https://docs.godotengine.org/en/stable/classes/class_string.html#class-string-method-match) syntax from GDScript.
 * `static func instance() -> Coverage`: Returns the current singleton instance. Must be created first with `Coverage.new(...)`
 * `static func finalize(print_verbose = false)`: Remove the singleton instance and print out the final coverage results. Pass `true` to print a verbose accounting of coverage for all files.
+* `func instrument_scripts(path: String, instrument_autoloads := true)`: **Recommended Approach** Recursively instrument all `*.gd` files within the requested path. Respects the `exclude_paths` argument passed to the constructor.
+    * When `instrument_autoloads` is set to false the autoload nodes will be ignored, otherwise they will also be instrumented.
+    * Returns `self` for chaining
 * `func instrument_scene_scripts(scene: PackedScene)`: Instrument all scripts and their preloaded dependencies for a specific scene. `instrument_scripts` is probably more reliable.
     * Returns `self` for chaining
-* `func instrument_scripts(path: String)`: Recursively instrument all `*.gd` files within the requested path. Respects the `exclude_paths` argument passed to the constructor.
-    * Returns `self` for chaining
-* `func instrument_autoloads()`: Instrument any autoload nodes that may have already been loaded.
+* `func instrument_autoloads()`: Just instrument autoload nodes that may have already been loaded. It's recommended to use `instrument_scripts` instead.
     * Returns `self` for chaining
 * `func enforce_node_coverage()`: Enables monitoring on scene tree updates and asserts that all nodes must have script coverage.
     * Returns `self` for chaining

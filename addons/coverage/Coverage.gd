@@ -124,6 +124,7 @@ const STATIC_VARS := {instance=null}
 var coverage_collectors := {}
 var _scene_tree: SceneTree
 var _exclude_paths := []
+var _enforce_node_coverage := false
 
 func _init(scene_tree: SceneTree, exclude_paths := []):
 	_exclude_paths += exclude_paths
@@ -134,12 +135,14 @@ func _init(scene_tree: SceneTree, exclude_paths := []):
 func enforce_node_coverage():
 	var err := _scene_tree.connect("tree_changed", self, "_on_tree_changed")
 	assert(err == OK)
+	_enforce_node_coverage = true
 	# this may error on autoload if you don't call `instrument_autoloads()` immediately
 	_on_tree_changed()
 	return self
 
 func _finalize(print_verbose := false):
-	_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
+	if _enforce_node_coverage:
+		_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
 	print('COVERAGE:\n%s' % [script_coverage(print_verbose)])
 
 func get_coverage_collector(script_name: String):
@@ -222,8 +225,7 @@ func instrument_scene_scripts(scene: PackedScene):
 				_instrument_script(s.get_node_property_value(i, npi))
 	return self
 
-func instrument_autoloads():
-	print('instrument-autoloads')
+func _collect_and_unload_autoloads():
 	var autoload_scripts := []
 	var root := _scene_tree.root
 	root.print_tree()
@@ -239,19 +241,30 @@ func instrument_autoloads():
 	for item in autoload_scripts:
 		var node = item.node
 		item.node.set_script(null)
-	autoload_scripts.invert()
+	return autoload_scripts
+
+func _reset_autoloads(autoload_scripts: Array):
 	for item in autoload_scripts:
-		_instrument_script(item.script)
 		item.node.set_script(item.script)
 		if item.node.has_method('_ready'):
 			item.node._ready()
-	root.print_tree()
+
+func instrument_autoloads():
+	print('instrument-autoloads')
+	var autoload_scripts = _collect_and_unload_autoloads()
+	autoload_scripts.invert()
+	for item in autoload_scripts:
+		_instrument_script(item.script)
+	_reset_autoloads(autoload_scripts)
 	return self
 
-func instrument_scripts(path: String):
+func instrument_scripts(path: String, instrument_autoloads := true):
+	var autoload_scripts = _collect_and_unload_autoloads() if instrument_autoloads else []
 	var list := _list_scripts_recursive(path)
 	for script in list:
 		_instrument_script(load(script))
+	if instrument_autoloads:
+		_reset_autoloads(autoload_scripts)
 	return self
 
 func _list_scripts_recursive(path: String, list := []) -> Array:
