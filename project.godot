@@ -30,6 +30,11 @@ config/name="Godot-code-coverage"
 run/main_scene="res://Spatial.tscn"
 config/icon="res://icon.png"
 
+[autoload]
+
+Autoload1="*res://Autoload1.gd"
+Autoload2="*res://Autoload2.gd"
+
 [editor_plugins]
 
 enabled=PoolStringArray( "res://addons/gut/plugin.cfg" )

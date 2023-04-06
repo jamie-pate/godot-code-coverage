@@ -17,14 +17,15 @@ func _on_Timer_timeout():
 	add_child(custom_label)
 	custom_label.margin_top = 20
 	var other = Other.new()
-	$Label.text = other.fmt("timeout")
+	$Label.text = Autoload1.fmt("timeout")
 	custom_label.custom_text = $Label.text
 	for i in range(2):
 		yield(get_tree().create_timer(.5), "timeout")
 		$Label.text = other.fmt(str(i))
 		custom_label.custom_text = $Label.text
 	yield(get_tree().create_timer(.5), "timeout")
-	$Label.text = other.fmt("done")
+	assert(Autoload2._counter == '3', "Autoload2 counter should be 3 because Autoload1 'formatting' signal fired")
+	$Label.text = Autoload2.fmt("done")
 	custom_label.custom_text = $Label.text
 	yield(get_tree().create_timer(.5), "timeout")
 	emit_signal("done")

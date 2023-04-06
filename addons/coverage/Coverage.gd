@@ -73,7 +73,6 @@ class ScriptCoverageCollector:
 			i += 1
 			if i == 1:
 				var s = get_script()
-				print('script resource_path', s.resource_path)
 				# todo: figure out how to get this path
 				out_lines.append('var __script_coverage_collector__ = preload("%s").instance().get_coverage_collector("%s")' % [
 					coverage_script_path,
@@ -131,9 +130,13 @@ func _init(scene_tree: SceneTree, exclude_paths := []):
 	assert(!STATIC_VARS.instance, 'Only one instance of this class is allowed')
 	STATIC_VARS.instance = self
 	_scene_tree = scene_tree
-	var err := scene_tree.connect("tree_changed", self, "_on_tree_changed")
+
+func enforce_node_coverage():
+	var err := _scene_tree.connect("tree_changed", self, "_on_tree_changed")
 	assert(err == OK)
+	# this may error on autoload if you don't call `instrument_autoloads()` immediately
 	_on_tree_changed()
+	return self
 
 func _finalize(print_verbose := false):
 	_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
@@ -206,7 +209,7 @@ func _instrument_script(script: GDScript) -> GDScript:
 				_instrument_script(load(dep))
 	return coverage_collectors[script_path].covered_script
 
-func instrument_scene_scripts(scene: PackedScene) -> void:
+func instrument_scene_scripts(scene: PackedScene):
 	var s := scene.get_state()
 	for i in range(s.get_node_count()):
 		var node_instance = s.get_node_instance(i)
@@ -217,11 +220,39 @@ func instrument_scene_scripts(scene: PackedScene) -> void:
 			var p = s.get_node_property_name(i, npi)
 			if p == 'script':
 				_instrument_script(s.get_node_property_value(i, npi))
+	return self
 
-func instrument_scripts(path: String) -> void:
+func instrument_autoloads():
+	print('instrument-autoloads')
+	var autoload_scripts := []
+	var root := _scene_tree.root
+	root.print_tree()
+	for n in root.get_children():
+		var autoload_setting = ProjectSettings.get_setting('autoload/%s' % [n.name])
+		if autoload_setting:
+			autoload_scripts.append({
+				name = n.name,
+				node = n,
+				script = n.get_script()
+			})
+	autoload_scripts.invert()
+	for item in autoload_scripts:
+		var node = item.node
+		item.node.set_script(null)
+	autoload_scripts.invert()
+	for item in autoload_scripts:
+		_instrument_script(item.script)
+		item.node.set_script(item.script)
+		if item.node.has_method('_ready'):
+			item.node._ready()
+	root.print_tree()
+	return self
+
+func instrument_scripts(path: String):
 	var list := _list_scripts_recursive(path)
 	for script in list:
 		_instrument_script(load(script))
+	return self
 
 func _list_scripts_recursive(path: String, list := []) -> Array:
 	var d := Directory.new()

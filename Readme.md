@@ -18,6 +18,7 @@ or to run coverage directly without GUT you can use
 
 `godot -s addons/coverage/CoverageTree.gd --scene=res://Spatial.tscn`
 
+After the `Coverage` instance is created and until `Coverage.instance().finalize()` the singleton will monitor the scene tree and ensure that no nodes are added with GDScript which are not excluded or instrumented.
 
 ### Coverage Requirements
 
@@ -35,13 +36,19 @@ See this project's `tests/pre_run_hook.gd`, `tests/post_run_hook.gd` and `.gutco
     * `exclude_paths` is a list of resource paths to be skipped when instrumenting files. It follows the [`String.match`](https://docs.godotengine.org/en/stable/classes/class_string.html#class-string-method-match) syntax from GDScript.
 * `static func instance() -> Coverage`: Returns the current singleton instance. Must be created first with `Coverage.new(...)`
 * `static func finalize(print_verbose = false)`: Remove the singleton instance and print out the final coverage results. Pass `true` to print a verbose accounting of coverage for all files.
+* `func instrument_scene_scripts(scene: PackedScene)`: Instrument all scripts and their preloaded dependencies for a specific scene. `instrument_scripts` is probably more reliable.
+    * Returns `self` for chaining
+* `func instrument_scripts(path: String)`: Recursively instrument all `*.gd` files within the requested path. Respects the `exclude_paths` argument passed to the constructor.
+    * Returns `self` for chaining
+* `func instrument_autoloads()`: Instrument any autoload nodes that may have already been loaded.
+    * Returns `self` for chaining
+* `func enforce_node_coverage()`: Enables monitoring on scene tree updates and asserts that all nodes must have script coverage.
+    * Returns `self` for chaining
 * `func get_coverage_collector(script_name: String) -> ScriptCoverageCollector`: Obtain the coverage collector for a specific script path, or null if it doesn't exist.
 * `func coverage_count() -> int`: Return the total number of lines which have been covered for all scripts.
 * `func coverage_line_count() -> int`: Return the total number of lines which have been instrumented for the all script.
 * `func coverage_percent() -> int`: Return the aggregate coverage percent (out of 100%) for all scripts.
-* `func script_covearge(verbose := false) -> String`: Return a string which describes the script coverage. If verbose is true then coverage for each file will be described.
-* `func instrument_scene_scripts(scene: PackedScene)`: Instrument all scripts and their preloaded dependencies for a specific scene. `instrument_scripts` is probably more reliable.
-* `func instrument_scripts(path: String)`: Recursively instrument all `*.gd` files within the requested path. Respects the `exclude_paths` argument passed to the constructor.
+* `func script_coverage(verbose := false) -> String`: Return a string which describes the script coverage. If verbose is true then coverage for each file will be described.
 
 #### `ScriptCoverageCollector` class:
 

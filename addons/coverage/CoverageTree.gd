@@ -4,7 +4,7 @@ const Coverage = preload("./Coverage.gd")
 
 func _initialize():
 	# need to create the instance because gdscript static functions have no access to their own scripts
-	Coverage.new(self)
+	Coverage.new(self).instrument_autoloads().enforce_node_coverage()
 	var args = OS.get_cmdline_args()
 	for a in args:
 		if a.begins_with('--scene='):
