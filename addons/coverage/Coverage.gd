@@ -225,29 +225,39 @@ func instrument_scene_scripts(scene: PackedScene):
 				_instrument_script(s.get_node_property_value(i, npi))
 	return self
 
-func _collect_script_objects(obj: Object, objs: Array):
+func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
+	# prevent cycles
+	obj_set[obj] = true
 	assert(obj)
 	objs.append({
 		obj = obj,
 		script = obj.get_script()
 	})
+	# collect all child nodes of an autoload that may have scripts attached
+	if obj is Node:
+		for c in obj.get_children():
+			var script = c.get_script()
+			if script && script.resource_path:
+				_collect_script_objects(c, objs, obj_set)
 	# collect all properties of autoloaded objects that may have scripts attached
 	for p in obj.get_property_list():
 		if p.type == TYPE_OBJECT:
 			if p.name in obj:
 				var value = obj.get(p.name)
-				var script = value.get_script() if value else null
-				if script:
-					_collect_script_objects(value, objs)
+				if !value in obj_set:
+					var script = value.get_script() if value else null
+					if script && script.resource_path:
+						_collect_script_objects(value, objs, obj_set)
 
 func _collect_and_unload_autoloads():
 	var autoloaded := []
+	var obj_set := {}
 	var root := _scene_tree.root
 	for n in root.get_children():
 		var setting_name = 'autoload/%s' % [n.name]
 		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ''
 		if autoload_setting:
-			_collect_script_objects(n, autoloaded)
+			_collect_script_objects(n, autoloaded, obj_set)
 	autoloaded.invert()
 	for item in autoloaded:
 		var obj = item.obj
@@ -257,12 +267,14 @@ func _collect_and_unload_autoloads():
 			for cs in obj.get_signal_connection_list(s.name):
 				print('s ',s, 'cs ', cs)
 				obj.disconnect(s.name, cs.target, cs.method)
+				print('afterdisconnect')
 
 		item.obj.set_script(null)
 	return autoloaded
 
 func _reset_autoloads(autoload_scripts: Array):
 	for item in autoload_scripts:
+		print('setscript %s' % [item.script.resource_path])
 		item.obj.set_script(item.script)
 		if item.obj.has_method('_ready'):
 			item.obj._ready()
