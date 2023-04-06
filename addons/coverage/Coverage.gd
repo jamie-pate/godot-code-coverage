@@ -52,9 +52,10 @@ class ScriptCoverageCollector:
 		return len(coverage_lines)
 
 	func coverage_percent() -> float:
-		return (float(coverage_count()) / float(coverage_line_count())) * 100.0
+		var clc = coverage_line_count()
+		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
 
-	func line_coverage(line_number) -> void:
+	func add_line_coverage(line_number) -> void:
 		if !line_number in coverage_lines:
 			coverage_lines[line_number] = 0
 		coverage_lines[line_number] = coverage_lines[line_number] + 1
@@ -74,7 +75,7 @@ class ScriptCoverageCollector:
 				var s = get_script()
 				print('script resource_path', s.resource_path)
 				# todo: figure out how to get this path
-				out_lines.append('var __script_coverage__ = preload("%s").instance().get_coverage_collector("%s")' % [
+				out_lines.append('var __script_coverage_collector__ = preload("%s").instance().get_coverage_collector("%s")' % [
 					coverage_script_path,
 					script.resource_path
 				])
@@ -113,7 +114,7 @@ class ScriptCoverageCollector:
 					next_state = State.StaticFunc
 			if state == State.Func:
 				coverage_lines[i] = 0
-				out_lines.append('%s__script_coverage__.line_coverage(%s)' % [
+				out_lines.append('%s__script_coverage_collector__.add_line_coverage(%s)' % [
 					leading_whitespace.join(''),
 					i
 				])
@@ -123,8 +124,10 @@ class ScriptCoverageCollector:
 const STATIC_VARS := {instance=null}
 var coverage_collectors := {}
 var _scene_tree: SceneTree
+var _exclude_paths := []
 
-func _init(scene_tree: SceneTree):
+func _init(scene_tree: SceneTree, exclude_paths := []):
+	_exclude_paths += exclude_paths
 	assert(!STATIC_VARS.instance, 'Only one instance of this class is allowed')
 	STATIC_VARS.instance = self
 	_scene_tree = scene_tree
@@ -137,29 +140,39 @@ func _finalize(print_verbose := false):
 	print('COVERAGE:\n%s' % [script_coverage(print_verbose)])
 
 func get_coverage_collector(script_name: String):
-	return coverage_collectors[script_name]
+	return coverage_collectors[script_name] if script_name in coverage_collectors else null
+
+func coverage_count() -> int:
+	var result := 0
+	for script in coverage_collectors:
+		result += coverage_collectors[script].coverage_count()
+	return result
+
+func coverage_line_count() -> int:
+	var result := 0
+	for script in coverage_collectors:
+		result += coverage_collectors[script].coverage_line_count()
+	return result
+
+func coverage_percent() -> float:
+	var clc = coverage_line_count()
+	return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
 
 func script_coverage(verbose := false):
 	var result = PoolStringArray()
 	var coverage_count := 0
 	var coverage_lines := 0
-	for script in coverage_collectors:
-		result.append('%s:' % [script])
-		result.append('%s' % [coverage_collectors[script]])
-		coverage_count += coverage_collectors[script].coverage_count()
-		coverage_lines += coverage_collectors[script].coverage_line_count()
+	if verbose:
+		for script in coverage_collectors:
+			result.append('%s:' % [script])
+			result.append('%s' % [coverage_collectors[script]])
 	result.append('Coverage: %s/%s %.1f%%' % [
-		coverage_count,
-		coverage_lines,
-		(float(coverage_count) / float(coverage_lines)) * 100.0
+		coverage_count(),
+		coverage_line_count(),
+		coverage_percent()
 	])
 
 	return result.join('\n\n')
-
-func add_coverage(coverage_script_path, script_path: String, line_number: int):
-	if !script_path in coverage_collectors:
-		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path, script_path)
-	coverage_collectors[script_path].line_coverage(line_number)
 
 func _on_tree_changed():
 	_ensure_node_script_instrumentation(_scene_tree.root)
@@ -168,7 +181,12 @@ func _ensure_node_script_instrumentation(node: Node):
 	# this is too late, if a node already has the script then reload it fails with ERR_ALREADY_IN_USE
 	var script = node.get_script()
 	if script is GDScript:
-		assert(script.resource_path in coverage_collectors, 'Node %s has a non-instrumented script %s' % [
+		var excluded = false
+		for ep in _exclude_paths:
+			if script.resource_path.match(ep):
+				excluded = true
+				break
+		assert(excluded || script.resource_path in coverage_collectors, 'Node %s has a non-instrumented script %s' % [
 			node.get_path() if node.is_inside_tree() else node.name,
 			script.resource_path
 		])
@@ -184,7 +202,7 @@ func _instrument_script(script: GDScript) -> GDScript:
 		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path ,script_path)
 		var deps = ResourceLoader.get_dependencies(script_path)
 		for dep in deps:
-			if dep.ends_with('.gd'):
+			if dep.get_extension() == 'gd':
 				_instrument_script(load(dep))
 	return coverage_collectors[script_path].covered_script
 
@@ -199,6 +217,34 @@ func instrument_scene_scripts(scene: PackedScene) -> void:
 			var p = s.get_node_property_name(i, npi)
 			if p == 'script':
 				_instrument_script(s.get_node_property_value(i, npi))
+
+func instrument_scripts(path: String) -> void:
+	var list := _list_scripts_recursive(path)
+	for script in list:
+		_instrument_script(load(script))
+
+func _list_scripts_recursive(path: String, list := []) -> Array:
+	var d := Directory.new()
+	var err := d.open(path)
+	assert(err == OK, "Error opening path %s: %s" % [path, err])
+	err = d.list_dir_begin(true)
+	assert(err == OK, "Error listing directory %s: %s" % [path, err])
+	var next := d.get_next()
+	while next:
+		var next_path = path.plus_file(next)
+		if next.get_extension() == 'gd':
+			var exclude := false
+			for ep in _exclude_paths:
+				if next_path.match(ep):
+					exclude = true
+					break
+			if !exclude:
+				list.append(next_path)
+		elif d.dir_exists(next_path):
+			_list_scripts_recursive(next_path, list)
+		next = d.get_next()
+	d.list_dir_end()
+	return list
 
 static func instance():
 	# unable to reference the Coverage script from a static so you need to call Coverage.new(...) first

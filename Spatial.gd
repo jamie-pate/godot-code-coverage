@@ -2,6 +2,10 @@ extends Spatial
 
 const Other = preload("./Other.gd")
 const CustomLabel = preload("./CustomLabel.gd")
+
+var auto_quit := true
+signal done()
+
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	var other = Other.new()
@@ -23,4 +27,6 @@ func _on_Timer_timeout():
 	$Label.text = other.fmt("done")
 	custom_label.custom_text = $Label.text
 	yield(get_tree().create_timer(.5), "timeout")
-	get_tree().quit()
+	emit_signal("done")
+	if auto_quit:
+		get_tree().quit()
