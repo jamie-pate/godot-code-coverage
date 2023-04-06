@@ -6,7 +6,7 @@ const COVERAGE_TARGET = 91.0
 
 func run():
 	var coverage_percent = Coverage.instance().coverage_percent()
-	Coverage.instance().finalize(true)
+	Coverage.instance().finalize(coverage_percent < COVERAGE_TARGET)
 	var logger = gut.get_logger()
 	if coverage_percent < COVERAGE_TARGET:
 		logger.failed("Coverage target of %.1f%% was not met" % [COVERAGE_TARGET])

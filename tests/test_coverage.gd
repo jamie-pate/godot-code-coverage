@@ -13,3 +13,5 @@ func test_autoload_coverage():
 	assert_true(Autoload1._initted)
 	assert_eq(Autoload1._ready, '1')
 	assert_eq(Autoload2._counter, '3')
+
+	assert_eq(Autoload1.other._initted, 1)

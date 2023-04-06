@@ -143,7 +143,7 @@ func enforce_node_coverage():
 func _finalize(print_verbose := false):
 	if _enforce_node_coverage:
 		_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
-	print('COVERAGE:\n%s' % [script_coverage(print_verbose)])
+	print(script_coverage(print_verbose))
 
 func get_coverage_collector(script_name: String):
 	return coverage_collectors[script_name] if script_name in coverage_collectors else null
@@ -225,29 +225,47 @@ func instrument_scene_scripts(scene: PackedScene):
 				_instrument_script(s.get_node_property_value(i, npi))
 	return self
 
+func _collect_script_objects(obj: Object, objs: Array):
+	assert(obj)
+	objs.append({
+		obj = obj,
+		script = obj.get_script()
+	})
+	# collect all properties of autoloaded objects that may have scripts attached
+	for p in obj.get_property_list():
+		if p.type == TYPE_OBJECT:
+			if p.name in obj:
+				var value = obj.get(p.name)
+				var script = value.get_script() if value else null
+				if script:
+					_collect_script_objects(value, objs)
+
 func _collect_and_unload_autoloads():
-	var autoload_scripts := []
+	var autoloaded := []
 	var root := _scene_tree.root
-	root.print_tree()
 	for n in root.get_children():
-		var autoload_setting = ProjectSettings.get_setting('autoload/%s' % [n.name])
+		var setting_name = 'autoload/%s' % [n.name]
+		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ''
 		if autoload_setting:
-			autoload_scripts.append({
-				name = n.name,
-				node = n,
-				script = n.get_script()
-			})
-	autoload_scripts.invert()
-	for item in autoload_scripts:
-		var node = item.node
-		item.node.set_script(null)
-	return autoload_scripts
+			_collect_script_objects(n, autoloaded)
+	autoloaded.invert()
+	for item in autoloaded:
+		var obj = item.obj
+		# since these are autoloaded they shouldn't have signal connections except those
+		# that are created in _init or _ready...
+		for s in obj.get_signal_list():
+			for cs in obj.get_signal_connection_list(s.name):
+				print('s ',s, 'cs ', cs)
+				obj.disconnect(s.name, cs.target, cs.method)
+
+		item.obj.set_script(null)
+	return autoloaded
 
 func _reset_autoloads(autoload_scripts: Array):
 	for item in autoload_scripts:
-		item.node.set_script(item.script)
-		if item.node.has_method('_ready'):
-			item.node._ready()
+		item.obj.set_script(item.script)
+		if item.obj.has_method('_ready'):
+			item.obj._ready()
 
 func instrument_autoloads():
 	print('instrument-autoloads')
