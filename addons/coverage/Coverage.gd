@@ -90,16 +90,18 @@ class ScriptCoverageCollector:
 			'()': 0,
 			'[]': 0
 		}
+		var add_collector_var := false
 		var continuation := false
+		var collector_var := "var __script_coverage_collector__ = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
+			coverage_script_path,
+			script.resource_path
+		]
 		for line_ in lines:
 			i += 1
 			if i == 1:
 				var s = get_script()
 				# todo: figure out how to get this path
-				out_lines.append("var __script_coverage_collector__ = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
-					coverage_script_path,
-					script.resource_path
-				])
+				out_lines.append(collector_var)
 			var line := line_ as String
 			var stripped_line := line.strip_edges()
 			if stripped_line == "":
@@ -131,17 +133,24 @@ class ScriptCoverageCollector:
 			# if we are in a block or have a continuation from the last line, don't add instrumentation
 			var skip := block_count > 0 || continuation
 			continuation = stripped_line.ends_with('\\')
-			if skip:
-				print('skip %s %s %s' %  [block_count, block, stripped_line])
+
+			if add_collector_var && first_token != "extends":
+				out_lines.append("%s%s" % [
+					leading_whitespace.join(""),
+					collector_var
+				])
+				add_collector_var = false
 			match first_token:
 				"func":
 					next_state = State.Func
 				"class":
 					next_state = State.Class
+					add_collector_var = true
 				"static":
 					next_state = State.StaticFunc
 				"else:", "elif":
 					skip = true
+
 			if state == State.Func && !skip:
 				coverage_lines[i] = 0
 				out_lines.append("%s__script_coverage_collector__.add_line_coverage(%s)" % [

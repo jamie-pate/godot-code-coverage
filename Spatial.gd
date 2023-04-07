@@ -7,10 +7,16 @@ var auto_quit := true
 
 signal done()
 
+class Inner:
+	extends Reference
+
+	static func fmt(value: String):
+		return 'Inner(%s)' % [value]
+
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	var other = Other.new()
-	$Label.text = other.fmt("hello world")
+	$Label.text = Inner.fmt(other.fmt("hello world"))
 
 func _on_Timer_timeout():
 	print('add child')
