@@ -7,8 +7,8 @@ class ScriptCoverageCollector:
 
 	enum State {None, Class, Func, StaticFunc}
 	var coverage_lines := {}
-	var script_path := ''
-	var source_code := ''
+	var script_path := ""
+	var source_code := ""
 	var covered_script: Script
 
 	func _init(coverage_script_path: String, _script_path: String) -> void:
@@ -22,24 +22,24 @@ class ScriptCoverageCollector:
 		if DEBUG_SCRIPT_COVERAGE:
 			print(script.source_code)
 		var err = script.reload()
-		assert(err == OK, 'Error reloading %s: %s\n%s' % [
+		assert(err == OK, "Error reloading %s: %s\n%s" % [
 			script.resource_path,
 			err,
 			script.source_code
 		])
 		if DEBUG_SCRIPT_COVERAGE:
-			print('new script resource_path %s' % [covered_script.resource_path])
+			print("new script resource_path %s" % [covered_script.resource_path])
 
 	func _to_string():
 		var result := PoolStringArray()
 		var i = 0
-		for line in source_code.split('\n'):
-			result.append('%4d %s %s' % [
-				i, '%4dx' % [coverage_lines[i]] if i in coverage_lines else '     ', line
+		for line in source_code.split("\n"):
+			result.append("%4d %s %s" % [
+				i, "%4dx" % [coverage_lines[i]] if i in coverage_lines else "     ", line
 			])
 			i += 1
-		result.append('%.1f%%' % [coverage_percent()])
-		return result.join('\n')
+		result.append("%.1f%%" % [coverage_percent()])
+		return result.join("\n")
 
 	func coverage_count() -> int:
 		var count = 0
@@ -60,8 +60,24 @@ class ScriptCoverageCollector:
 			coverage_lines[line_number] = 0
 		coverage_lines[line_number] = coverage_lines[line_number] + 1
 
+	func _get_first_token(stripped_line: String) -> String:
+		var space_token = stripped_line.get_slice(" ", 0)
+		var tab_token = stripped_line.get_slice("\t", 0)
+		return space_token if len(space_token) < len(tab_token) else tab_token
+
+	func _update_block_count(block_dict: Dictionary, line: String) -> void:
+		for key in block_dict:
+			var block_count = line.count(key[0]) - line.count(key[1])
+			block_dict[key] += block_count
+
+	func _count_block(block_dict: Dictionary) -> int:
+		var result := 0
+		for key in block_dict:
+			result += block_dict[key]
+		return result
+
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript) -> String:
-		var lines = script.source_code.split('\n')
+		var lines = script.source_code.split("\n")
 		var state_stack := []
 		var ld_stack := []
 		var state:int = State.None
@@ -69,24 +85,30 @@ class ScriptCoverageCollector:
 		var depth := 0
 		var out_lines := PoolStringArray()
 		var i := -1
+		var block := {
+			'{}': 0,
+			'()': 0,
+			'[]': 0
+		}
+		var continuation := false
 		for line_ in lines:
 			i += 1
 			if i == 1:
 				var s = get_script()
 				# todo: figure out how to get this path
-				out_lines.append('var __script_coverage_collector__ = preload("%s").instance().get_coverage_collector("%s")' % [
+				out_lines.append("var __script_coverage_collector__ = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
 					coverage_script_path,
 					script.resource_path
 				])
 			var line := line_ as String
-			var stripped_line = line.strip_edges()
-			if stripped_line == '':
+			var stripped_line := line.strip_edges()
+			if stripped_line == "":
 				out_lines.append(line)
 				continue
 			var line_depth = 0
 			var leading_whitespace := PoolStringArray()
 			for chr in range(len(line)):
-				if line[chr] in [' ', '\t']:
+				if line[chr] in [" ", "\t"]:
 					line_depth += 1
 					leading_whitespace.append(line[chr])
 				else:
@@ -95,30 +117,39 @@ class ScriptCoverageCollector:
 				depth = ld_stack.pop_back()
 				state = state_stack.pop_back()
 				if DEBUG_SCRIPT_COVERAGE:
-					print('POP_LINE_DEPTH %s %s' % [depth, state])
+					print("POP_LINE_DEPTH %s %s" % [depth, state])
 			if line_depth > depth:
 				state_stack.append(state)
 				ld_stack.append(depth)
 				state = next_state
 			depth = line_depth
-			var first_token = (
-				line.get_slice(' ', 0) if len(line.get_slice(' ', 0)) < len(line.get_slice('\t', 0)) else line.get_slice('\t', 0)
-			)
+			var first_token := _get_first_token(stripped_line)
+			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
+			var block_count := _count_block(block)
+			# update the block count ( '(', '{' and '[' characters create a block )
+			_update_block_count(block, stripped_line)
+			# if we are in a block or have a continuation from the last line, don't add instrumentation
+			var skip := block_count > 0 || continuation
+			continuation = stripped_line.ends_with('\\')
+			if skip:
+				print('skip %s %s %s' %  [block_count, block, stripped_line])
 			match first_token:
-				'func':
+				"func":
 					next_state = State.Func
-				'class':
+				"class":
 					next_state = State.Class
-				'static':
+				"static":
 					next_state = State.StaticFunc
-			if state == State.Func:
+				"else:", "elif":
+					skip = true
+			if state == State.Func && !skip:
 				coverage_lines[i] = 0
-				out_lines.append('%s__script_coverage_collector__.add_line_coverage(%s)' % [
-					leading_whitespace.join(''),
+				out_lines.append("%s__script_coverage_collector__.add_line_coverage(%s)" % [
+					leading_whitespace.join(""),
 					i
 				])
 			out_lines.append(line)
-		return out_lines.join('\n')
+		return out_lines.join("\n")
 
 const STATIC_VARS := {instance=null}
 var coverage_collectors := {}
@@ -128,7 +159,7 @@ var _enforce_node_coverage := false
 
 func _init(scene_tree: SceneTree, exclude_paths := []):
 	_exclude_paths += exclude_paths
-	assert(!STATIC_VARS.instance, 'Only one instance of this class is allowed')
+	assert(!STATIC_VARS.instance, "Only one instance of this class is allowed")
 	STATIC_VARS.instance = self
 	_scene_tree = scene_tree
 
@@ -136,7 +167,7 @@ func enforce_node_coverage():
 	var err := _scene_tree.connect("tree_changed", self, "_on_tree_changed")
 	assert(err == OK)
 	_enforce_node_coverage = true
-	# this may error on autoload if you don't call `instrument_autoloads()` immediately
+	# this may error on autoload if you don"t call `instrument_autoloads()` immediately
 	_on_tree_changed()
 	return self
 
@@ -170,15 +201,15 @@ func script_coverage(verbose := false):
 	var coverage_lines := 0
 	if verbose:
 		for script in coverage_collectors:
-			result.append('%s:' % [script])
-			result.append('%s' % [coverage_collectors[script]])
-	result.append('Coverage: %s/%s %.1f%%' % [
+			result.append("%s:" % [script])
+			result.append("%s" % [coverage_collectors[script]])
+	result.append("Coverage: %s/%s %.1f%%" % [
 		coverage_count(),
 		coverage_line_count(),
 		coverage_percent()
 	])
 
-	return result.join('\n\n')
+	return result.join("\n\n")
 
 func _on_tree_changed():
 	_ensure_node_script_instrumentation(_scene_tree.root)
@@ -192,7 +223,7 @@ func _ensure_node_script_instrumentation(node: Node):
 			if script.resource_path.match(ep):
 				excluded = true
 				break
-		assert(excluded || script.resource_path in coverage_collectors, 'Node %s has a non-instrumented script %s' % [
+		assert(excluded || script.resource_path in coverage_collectors, "Node %s has a non-instrumented script %s" % [
 			node.get_path() if node.is_inside_tree() else node.name,
 			script.resource_path
 		])
@@ -203,12 +234,12 @@ func _instrument_script(script: GDScript) -> GDScript:
 	var script_path = script.resource_path
 	var coverage_script_path = get_script().resource_path
 	if !script_path:
-		print('script has no path: %s' % [script.source_code])
+		print("script has no path: %s" % [script.source_code])
 	if script_path && !script_path in coverage_collectors:
 		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path ,script_path)
 		var deps = ResourceLoader.get_dependencies(script_path)
 		for dep in deps:
-			if dep.get_extension() == 'gd':
+			if dep.get_extension() == "gd":
 				_instrument_script(load(dep))
 	return coverage_collectors[script_path].covered_script
 
@@ -221,7 +252,7 @@ func instrument_scene_scripts(scene: PackedScene):
 			instrument_scene_scripts(node_instance)
 		for npi in range(s.get_node_property_count(i)):
 			var p = s.get_node_property_name(i, npi)
-			if p == 'script':
+			if p == "script":
 				_instrument_script(s.get_node_property_value(i, npi))
 	return self
 
@@ -254,33 +285,29 @@ func _collect_and_unload_autoloads():
 	var obj_set := {}
 	var root := _scene_tree.root
 	for n in root.get_children():
-		var setting_name = 'autoload/%s' % [n.name]
-		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ''
+		var setting_name = "autoload/%s" % [n.name]
+		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ""
 		if autoload_setting:
 			_collect_script_objects(n, autoloaded, obj_set)
 	autoloaded.invert()
 	for item in autoloaded:
 		var obj = item.obj
-		# since these are autoloaded they shouldn't have signal connections except those
+		# since these are autoloaded they shouldn"t have signal connections except those
 		# that are created in _init or _ready...
 		for s in obj.get_signal_list():
 			for cs in obj.get_signal_connection_list(s.name):
-				print('s ',s, 'cs ', cs)
 				obj.disconnect(s.name, cs.target, cs.method)
-				print('afterdisconnect')
 
 		item.obj.set_script(null)
 	return autoloaded
 
 func _reset_autoloads(autoload_scripts: Array):
 	for item in autoload_scripts:
-		print('setscript %s' % [item.script.resource_path])
 		item.obj.set_script(item.script)
-		if item.obj.has_method('_ready'):
+		if item.obj.has_method("_ready"):
 			item.obj._ready()
 
 func instrument_autoloads():
-	print('instrument-autoloads')
 	var autoload_scripts = _collect_and_unload_autoloads()
 	autoload_scripts.invert()
 	for item in autoload_scripts:
@@ -306,7 +333,7 @@ func _list_scripts_recursive(path: String, list := []) -> Array:
 	var next := d.get_next()
 	while next:
 		var next_path = path.plus_file(next)
-		if next.get_extension() == 'gd':
+		if next.get_extension() == "gd":
 			var exclude := false
 			for ep in _exclude_paths:
 				if next_path.match(ep):
