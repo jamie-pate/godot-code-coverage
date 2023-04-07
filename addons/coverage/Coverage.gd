@@ -92,6 +92,8 @@ class ScriptCoverageCollector:
 		}
 		var add_collector_var := false
 		var continuation := false
+		var NOT_IN_MATCH := 0xEFFFFFFF
+		var in_match := NOT_IN_MATCH
 		var collector_var := "var __script_coverage_collector__ = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
 			coverage_script_path,
 			script.resource_path
@@ -120,6 +122,8 @@ class ScriptCoverageCollector:
 				state = state_stack.pop_back()
 				if DEBUG_SCRIPT_COVERAGE:
 					print("POP_LINE_DEPTH %s %s" % [depth, state])
+				if depth < in_match:
+					in_match = NOT_IN_MATCH
 			if line_depth > depth:
 				state_stack.append(state)
 				ld_stack.append(depth)
@@ -150,6 +154,12 @@ class ScriptCoverageCollector:
 					next_state = State.StaticFunc
 				"else:", "elif":
 					skip = true
+				"match":
+					# lazy code here, could be improved to actually deal with nested matches properly
+					if in_match == NOT_IN_MATCH:
+						in_match = depth
+			if in_match && stripped_line.ends_with(':'):
+				skip = true
 
 			if state == State.Func && !skip:
 				coverage_lines[i] = 0
