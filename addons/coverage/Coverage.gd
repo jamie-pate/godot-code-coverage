@@ -235,34 +235,37 @@ func script_coverage(verbose := false):
 func _on_tree_changed():
 	_ensure_node_script_instrumentation(_scene_tree.root)
 
+func _excluded(resource_path: String) -> bool:
+	var excluded = false
+	for ep in _exclude_paths:
+		if resource_path.match(ep):
+			excluded = true
+			break
+	return excluded
+
 func _ensure_node_script_instrumentation(node: Node):
 	# this is too late, if a node already has the script then reload it fails with ERR_ALREADY_IN_USE
 	var script = node.get_script()
 	if script is GDScript:
-		var excluded = false
-		for ep in _exclude_paths:
-			if script.resource_path.match(ep):
-				excluded = true
-				break
-		assert(excluded || script.resource_path in coverage_collectors, "Node %s has a non-instrumented script %s" % [
+		assert(_excluded(script.resource_path) || script.resource_path in coverage_collectors, "Node %s has a non-instrumented script %s" % [
 			node.get_path() if node.is_inside_tree() else node.name,
 			script.resource_path
 		])
 	for n in node.get_children():
 		_ensure_node_script_instrumentation(n)
 
-func _instrument_script(script: GDScript) -> GDScript:
+func _instrument_script(script: GDScript) -> void:
 	var script_path = script.resource_path
 	var coverage_script_path = get_script().resource_path
 	if !script_path:
 		print("script has no path: %s" % [script.source_code])
-	if script_path && !script_path in coverage_collectors:
+
+	if !_excluded(script_path) && script_path && !script_path in coverage_collectors:
 		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path ,script_path)
 		var deps = ResourceLoader.get_dependencies(script_path)
 		for dep in deps:
 			if dep.get_extension() == "gd":
 				_instrument_script(load(dep))
-	return coverage_collectors[script_path].covered_script
 
 func instrument_scene_scripts(scene: PackedScene):
 	var s := scene.get_state()
@@ -281,10 +284,11 @@ func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
 	# prevent cycles
 	obj_set[obj] = true
 	assert(obj)
-	objs.append({
-		obj = obj,
-		script = obj.get_script()
-	})
+	if !_excluded(obj.get_script().resource_path):
+		objs.append({
+			obj = obj,
+			script = obj.get_script()
+		})
 	# collect all child nodes of an autoload that may have scripts attached
 	if obj is Node:
 		for c in obj.get_children():
@@ -355,12 +359,7 @@ func _list_scripts_recursive(path: String, list := []) -> Array:
 	while next:
 		var next_path = path.plus_file(next)
 		if next.get_extension() == "gd":
-			var exclude := false
-			for ep in _exclude_paths:
-				if next_path.match(ep):
-					exclude = true
-					break
-			if !exclude:
+			if !_excluded(next_path):
 				list.append(next_path)
 		elif d.dir_exists(next_path):
 			_list_scripts_recursive(next_path, list)
