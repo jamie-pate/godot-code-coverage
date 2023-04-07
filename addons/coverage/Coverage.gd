@@ -4,6 +4,7 @@ class ScriptCoverageCollector:
 	extends Reference
 
 	const DEBUG_SCRIPT_COVERAGE := false
+	const STATIC_VARS := {last_script_id = 0}
 
 	enum State {None, Class, Func, StaticFunc}
 	var coverage_lines := {}
@@ -18,7 +19,9 @@ class ScriptCoverageCollector:
 			print(script)
 		covered_script = script
 		source_code = script.source_code
-		script.source_code = _interpolate_coverage(coverage_script_path, script)
+		var id = STATIC_VARS.last_script_id + 1
+		STATIC_VARS.last_script_id = id
+		script.source_code = _interpolate_coverage(coverage_script_path, script, id)
 		if DEBUG_SCRIPT_COVERAGE:
 			print(script.source_code)
 		var err = script.reload()
@@ -76,7 +79,7 @@ class ScriptCoverageCollector:
 			result += block_dict[key]
 		return result
 
-	func _interpolate_coverage(coverage_script_path: String, script: GDScript) -> String:
+	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
 		var lines = script.source_code.split("\n")
 		var state_stack := []
 		var ld_stack := []
@@ -94,7 +97,9 @@ class ScriptCoverageCollector:
 		var continuation := false
 		var NOT_IN_MATCH := 0xEFFFFFFF
 		var in_match := NOT_IN_MATCH
-		var collector_var := "var __script_coverage_collector__ = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
+		var collector_var_name = "__script_coverage_collector%s__" % [id]
+		var collector_var := "var %s = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
+			collector_var_name,
 			coverage_script_path,
 			script.resource_path
 		]
@@ -165,8 +170,9 @@ class ScriptCoverageCollector:
 
 			if state == State.Func && !skip:
 				coverage_lines[i] = 0
-				out_lines.append("%s__script_coverage_collector__.add_line_coverage(%s)" % [
+				out_lines.append("%s%s.add_line_coverage(%s)" % [
 					leading_whitespace.join(""),
+					collector_var_name,
 					i
 				])
 			out_lines.append(line)
