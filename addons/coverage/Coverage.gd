@@ -134,8 +134,10 @@ class ScriptCoverageCollector:
 			var block_count := _count_block(block)
 			# update the block count ( '(', '{' and '[' characters create a block )
 			_update_block_count(block, stripped_line)
-			# if we are in a block or have a continuation from the last line, don't add instrumentation
-			var skip := block_count > 0 || continuation
+			# if we are in a block or have a continuation from the last line or start with # (comment)
+			# don't add instrumentation
+
+			var skip := block_count > 0 || continuation || stripped_line.begins_with('#')
 			continuation = stripped_line.ends_with('\\')
 
 			if add_collector_var && first_token != "extends":

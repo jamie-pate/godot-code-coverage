@@ -43,6 +43,7 @@ func _on_Timer_timeout():
 		match i:
 			0:
 				$Label.text = other.fmt(str(i))
+			# 1
 			1:
 				$Label.text = other.fmt(str(i * 1))
 		custom_label.custom_text = $Label.text
