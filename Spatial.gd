@@ -46,6 +46,7 @@ func _on_Timer_timeout():
 			# 1
 			1:
 				$Label.text = other.fmt(str(i * 1))
+			3: $Label.text = other.fmt(str(i * 1))
 		custom_label.custom_text = $Label.text
 	yield(get_tree().create_timer(.5), "timeout")
 	assert(Autoload2._counter == '3', "Autoload2 counter should be 3 because Autoload1 'formatting' signal fired")

@@ -6,11 +6,23 @@ class ScriptCoverageCollector:
 	const DEBUG_SCRIPT_COVERAGE := false
 	const STATIC_VARS := {last_script_id = 0}
 
-	enum State {None, Class, Func, StaticFunc}
+
 	var coverage_lines := {}
 	var script_path := ""
 	var source_code := ""
 	var covered_script: Script
+
+	class Indent:
+		extends Reference
+		enum State {None, Class, Func, StaticFunc, Match, MatchPattern}
+
+		var depth := 0
+		var state:int = State.None
+
+		func _init(_depth: int, _state: int):
+			depth = _depth
+			state = _state
+
 
 	func _init(coverage_script_path: String, _script_path: String) -> void:
 		script_path = _script_path
@@ -81,10 +93,10 @@ class ScriptCoverageCollector:
 
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
 		var lines = script.source_code.split("\n")
-		var state_stack := []
+		var indent_stack := []
 		var ld_stack := []
-		var state:int = State.None
-		var next_state: int = State.None
+		var state:int = Indent.State.None
+		var next_state: int = Indent.State.None
 		var depth := 0
 		var out_lines := PoolStringArray()
 		var i := -1
@@ -95,8 +107,6 @@ class ScriptCoverageCollector:
 		}
 		var add_collector_var := false
 		var continuation := false
-		var NOT_IN_MATCH := 0xEFFFFFFF
-		var in_match := NOT_IN_MATCH
 		var collector_var_name = "__script_coverage_collector%s__" % [id]
 		var collector_var := "var %s = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
 			collector_var_name,
@@ -123,15 +133,13 @@ class ScriptCoverageCollector:
 				else:
 					break
 			while line_depth < depth:
-				depth = ld_stack.pop_back()
-				state = state_stack.pop_back()
+				var indent = indent_stack.pop_back()
+				depth = indent.depth
+				state = indent.state
 				if DEBUG_SCRIPT_COVERAGE:
 					print("POP_LINE_DEPTH %s %s" % [depth, state])
-				if depth < in_match:
-					in_match = NOT_IN_MATCH
 			if line_depth > depth:
-				state_stack.append(state)
-				ld_stack.append(depth)
+				indent_stack.append(Indent.new(depth, state))
 				state = next_state
 			depth = line_depth
 			var first_token := _get_first_token(stripped_line)
@@ -153,22 +161,22 @@ class ScriptCoverageCollector:
 				add_collector_var = false
 			match first_token:
 				"func":
-					next_state = State.Func
+					next_state = Indent.State.Func
 				"class":
-					next_state = State.Class
+					next_state = Indent.State.Class
 					add_collector_var = true
 				"static":
-					next_state = State.StaticFunc
+					next_state = Indent.State.StaticFunc
 				"else:", "elif":
 					skip = true
 				"match":
-					# lazy code here, could be improved to actually deal with nested matches properly
-					if in_match == NOT_IN_MATCH:
-						in_match = depth
-			if in_match && stripped_line.ends_with(':'):
-				skip = true
+					next_state = Indent.State.Match
+			if state == Indent.State.Match && stripped_line.ends_with(":"):
+				next_state = Indent.State.MatchPattern
+			elif state == Indent.State.MatchPattern:
+				next_state = Indent.State.Func
 
-			if state == State.Func && !skip:
+			if state == Indent.State.Func && !skip:
 				coverage_lines[i] = 0
 				out_lines.append("%s%s.add_line_coverage(%s)" % [
 					leading_whitespace.join(""),
