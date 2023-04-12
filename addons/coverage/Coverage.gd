@@ -91,6 +91,31 @@ class ScriptCoverageCollector:
 			result += block_dict[key]
 		return result
 
+	func _find_next_extends(i: int, lines: Array) -> int:
+		var last_whitespace = _get_leading_whitespace(lines[i])
+		var result := i
+		while i < len(lines):
+			var stripped_line = lines[i].strip_edges()
+			var leading_whitespace = _get_leading_whitespace(lines[i])
+			var first_token = _get_first_token(stripped_line)
+			if first_token == 'extends':
+				return i + 1
+			# 	if (!p_class->constant_expressions.empty() || !p_class->subclasses.empty() || !p_class->functions.empty() || !p_class->variables.empty())
+			if last_whitespace != leading_whitespace || first_token && first_token in ['const', 'class', 'func', 'var', 'onready', 'export']:
+				break
+			i += 1
+		# if we make it here then there is an implicit 'extends Object' and we don't need to worry
+		return result
+
+	func _get_leading_whitespace(line: String) -> String:
+		var leading_whitespace := PoolStringArray()
+		for chr in range(len(line)):
+			if line[chr] in [" ", "\t"]:
+				leading_whitespace.append(line[chr])
+			else:
+				break
+		return leading_whitespace.join("")
+
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
 		var lines = script.source_code.split("\n")
 		var indent_stack := []
@@ -99,12 +124,14 @@ class ScriptCoverageCollector:
 		var next_state: int = Indent.State.None
 		var depth := 0
 		var out_lines := PoolStringArray()
+		# 0 based, start with -1 so that the first increment will give 0
 		var i := -1
 		var block := {
 			'{}': 0,
 			'()': 0,
 			'[]': 0
 		}
+		var collector_var_line := _find_next_extends(0, lines)
 		var add_collector_var := false
 		var continuation := false
 		var collector_var_name = "__script_coverage_collector%s__" % [id]
@@ -115,23 +142,19 @@ class ScriptCoverageCollector:
 		]
 		for line_ in lines:
 			i += 1
-			if i == 1:
-				var s = get_script()
-				# todo: figure out how to get this path
-				out_lines.append(collector_var)
 			var line := line_ as String
+			var leading_whitespace := _get_leading_whitespace(line)
 			var stripped_line := line.strip_edges()
 			if stripped_line == "":
 				out_lines.append(line)
 				continue
+			if collector_var_line >= 0 && collector_var_line <= i:
+				var s = get_script()
+				out_lines.append("%s%s" % [leading_whitespace, collector_var])
+				collector_var_line = -1
+
 			var line_depth = 0
-			var leading_whitespace := PoolStringArray()
-			for chr in range(len(line)):
-				if line[chr] in [" ", "\t"]:
-					line_depth += 1
-					leading_whitespace.append(line[chr])
-				else:
-					break
+			line_depth = len(leading_whitespace)
 			while line_depth < depth:
 				var indent = indent_stack.pop_back()
 				depth = indent.depth
@@ -153,18 +176,12 @@ class ScriptCoverageCollector:
 			var skip := block_count > 0 || continuation || stripped_line.begins_with('#')
 			continuation = stripped_line.ends_with('\\')
 
-			if add_collector_var && first_token != "extends":
-				out_lines.append("%s%s" % [
-					leading_whitespace.join(""),
-					collector_var
-				])
-				add_collector_var = false
 			match first_token:
 				"func":
 					next_state = Indent.State.Func
 				"class":
 					next_state = Indent.State.Class
-					add_collector_var = true
+					collector_var_line = _find_next_extends(i + 1, lines)
 				"static":
 					next_state = Indent.State.StaticFunc
 				"else:", "elif":
@@ -179,7 +196,7 @@ class ScriptCoverageCollector:
 			if state == Indent.State.Func && !skip:
 				coverage_lines[i] = 0
 				out_lines.append("%s%s.add_line_coverage(%s)" % [
-					leading_whitespace.join(""),
+					leading_whitespace,
 					collector_var_name,
 					i
 				])

@@ -1,3 +1,4 @@
+tool
 extends Spatial
 
 const Other = preload("./Other.gd")
@@ -8,6 +9,7 @@ var auto_quit := true
 signal done()
 
 class Inner:
+	tool
 	extends Reference
 
 	static func fmt(value: String):
