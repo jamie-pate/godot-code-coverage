@@ -8,9 +8,13 @@ var auto_quit := true
 
 signal done()
 
+
 class Inner:
 	tool
 	extends Reference
+
+	class InnerEmpty:
+		extends Reference
 
 	static func fmt(value: String):
 		return 'Inner(%s)' % [value]

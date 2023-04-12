@@ -131,7 +131,10 @@ class ScriptCoverageCollector:
 			'()': 0,
 			'[]': 0
 		}
+		# the collector var must be placed after 'extends' but
+		# should be skipped if the source code un-indents before it's added
 		var collector_var_line := _find_next_extends(0, lines)
+		var collector_var_depth := -1
 		var add_collector_var := false
 		var continuation := false
 		var collector_var_name = "__script_coverage_collector%s__" % [id]
@@ -144,17 +147,19 @@ class ScriptCoverageCollector:
 			i += 1
 			var line := line_ as String
 			var leading_whitespace := _get_leading_whitespace(line)
+			var line_depth = len(leading_whitespace)
 			var stripped_line := line.strip_edges()
 			if stripped_line == "":
 				out_lines.append(line)
 				continue
 			if collector_var_line >= 0 && collector_var_line <= i:
-				var s = get_script()
-				out_lines.append("%s%s" % [leading_whitespace, collector_var])
+				# don't add the collector var if we aren't at the same depth
+				# e.g. Reference class where `extends` is the only line
+				if collector_var_depth < line_depth:
+					var s = get_script()
+					out_lines.append("%s%s" % [leading_whitespace, collector_var])
 				collector_var_line = -1
 
-			var line_depth = 0
-			line_depth = len(leading_whitespace)
 			while line_depth < depth:
 				var indent = indent_stack.pop_back()
 				depth = indent.depth
@@ -182,6 +187,7 @@ class ScriptCoverageCollector:
 				"class":
 					next_state = Indent.State.Class
 					collector_var_line = _find_next_extends(i + 1, lines)
+					collector_var_depth = depth
 				"static":
 					next_state = Indent.State.StaticFunc
 				"else:", "elif":
