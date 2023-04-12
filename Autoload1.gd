@@ -16,6 +16,6 @@ func _init():
 func _ready():
 	_ready = '1'
 
-func fmt(value: String):
+func fmt(value: String) -> String:
 	emit_signal('formatting')
 	return other_node.fmt(other.fmt('%s:%s:%s' % [_initted, _ready, value]))

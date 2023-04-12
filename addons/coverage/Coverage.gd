@@ -5,12 +5,16 @@ class ScriptCoverageCollector:
 
 	const DEBUG_SCRIPT_COVERAGE := false
 	const STATIC_VARS := {last_script_id = 0}
+	const ERR_MAP := {
+		43: "PARSE_ERROR"
+	}
 
 
 	var coverage_lines := {}
 	var script_path := ""
 	var source_code := ""
 	var covered_script: Script
+	var collector_var_name := ""
 
 	class Indent:
 		extends Reference
@@ -36,14 +40,27 @@ class ScriptCoverageCollector:
 		script.source_code = _interpolate_coverage(coverage_script_path, script, id)
 		if DEBUG_SCRIPT_COVERAGE:
 			print(script.source_code)
-		var err = script.reload()
-		assert(err == OK, "Error reloading %s: %s\n%s" % [
+		# if we pass 'keep_state = true' to reload() then we can reload the script
+		# without removing it from all the nodes.
+		# this requires us to add a function call for each line that checks to make
+		# sure the coverage variable is set before calling add_line_coverage
+		var err = script.reload(true)
+
+		assert(err == OK, "Error reloading %s: error: %s\n-------\n%s" % [
 			script.resource_path,
-			err,
-			script.source_code
+			ERR_MAP[err] if err in ERR_MAP else err,
+			_add_line_numbers(script.source_code)
 		])
 		if DEBUG_SCRIPT_COVERAGE:
 			print("new script resource_path %s" % [covered_script.resource_path])
+
+	func _add_line_numbers(source_code: String) -> String:
+		var result := PoolStringArray()
+		var i := 0
+		for line in source_code.split("\n"):
+			result.append("%4d: %s" % [i, line])
+			i += 1
+		return result.join("\n")
 
 	func _to_string():
 		var result := PoolStringArray()
@@ -116,6 +133,21 @@ class ScriptCoverageCollector:
 				break
 		return leading_whitespace.join("")
 
+	func _get_coverage_collector_expr(coverage_script_path: String, script_resource_path: String) -> String:
+		return "load(\"%s\").instance().get_coverage_collector(\"%s\")" % [
+				coverage_script_path,
+				script_resource_path
+			]
+
+	func _collector_var(leading_whitespace: String, coverage_script_path: String, script_resource_path: String) -> String:
+		return "\n" + leading_whitespace + PoolStringArray([
+			"var %s" % [collector_var_name],
+			"func %s(line):" % [collector_var_name],
+			"\tif !%s:" % [collector_var_name],
+			"\t\t%s = %s" % [collector_var_name, _get_coverage_collector_expr(coverage_script_path, script_resource_path)],
+			"\t%s.add_line_coverage(line)" % [collector_var_name]
+		]).join('\n%s' % [leading_whitespace])
+
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
 		var lines = script.source_code.split("\n")
 		var indent_stack := []
@@ -137,12 +169,9 @@ class ScriptCoverageCollector:
 		var collector_var_depth := -1
 		var add_collector_var := false
 		var continuation := false
-		var collector_var_name = "__script_coverage_collector%s__" % [id]
-		var collector_var := "var %s = preload(\"%s\").instance().get_coverage_collector(\"%s\")" % [
-			collector_var_name,
-			coverage_script_path,
-			script.resource_path
-		]
+		collector_var_name = "__script_coverage_collector%s__" % [id]
+
+
 		for line_ in lines:
 			i += 1
 			var line := line_ as String
@@ -157,7 +186,10 @@ class ScriptCoverageCollector:
 				# e.g. Reference class where `extends` is the only line
 				if collector_var_depth < line_depth:
 					var s = get_script()
-					out_lines.append("%s%s" % [leading_whitespace, collector_var])
+					out_lines.append("%s%s" % [
+						leading_whitespace,
+						_collector_var(leading_whitespace, coverage_script_path, script.resource_path)
+					])
 				collector_var_line = -1
 
 			while line_depth < depth:
@@ -198,12 +230,16 @@ class ScriptCoverageCollector:
 				next_state = Indent.State.MatchPattern
 			elif state == Indent.State.MatchPattern:
 				next_state = Indent.State.Func
-
-			if state == Indent.State.Func && !skip:
+			if !skip && state in [Indent.State.Func, Indent.State.StaticFunc]:
+				var fn_call = collector_var_name
+				if state == Indent.State.StaticFunc:
+					fn_call = "%s.add_line_coverage" % [
+						_get_coverage_collector_expr(coverage_script_path, script.resource_path)
+					]
 				coverage_lines[i] = 0
-				out_lines.append("%s%s.add_line_coverage(%s)" % [
+				out_lines.append("%s%s(%s)" % [
 					leading_whitespace,
-					collector_var_name,
+					fn_call,
 					i
 				])
 			out_lines.append(line)
@@ -214,6 +250,7 @@ var coverage_collectors := {}
 var _scene_tree: SceneTree
 var _exclude_paths := []
 var _enforce_node_coverage := false
+var _autoloads_instrumented := false
 
 func _init(scene_tree: SceneTree, exclude_paths := []):
 	_exclude_paths += exclude_paths
@@ -320,8 +357,9 @@ func instrument_scene_scripts(scene: PackedScene):
 func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
 	# prevent cycles
 	obj_set[obj] = true
-	assert(obj)
-	if !_excluded(obj.get_script().resource_path):
+	print("collect script from %s" % [obj])
+	assert(obj && obj.get_script(), "Couldn't collect script from %s" % [obj])
+	if obj.get_script() && !_excluded(obj.get_script().resource_path):
 		objs.append({
 			obj = obj,
 			script = obj.get_script()
@@ -342,7 +380,10 @@ func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
 					if script && script.resource_path:
 						_collect_script_objects(value, objs, obj_set)
 
-func _collect_and_unload_autoloads():
+func _collect_autoloads():
+	assert(!_autoloads_instrumented, "Tried to collect autoloads twice?")
+	_autoloads_instrumented = true
+	print('collect autoloads')
 	var autoloaded := []
 	var obj_set := {}
 	var root := _scene_tree.root
@@ -350,40 +391,28 @@ func _collect_and_unload_autoloads():
 		var setting_name = "autoload/%s" % [n.name]
 		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ""
 		if autoload_setting:
+			print('collect autoload %s' % [n])
 			_collect_script_objects(n, autoloaded, obj_set)
 	autoloaded.invert()
+	var deps := []
 	for item in autoloaded:
-		var obj = item.obj
-		# since these are autoloaded they shouldn"t have signal connections except those
-		# that are created in _init or _ready...
-		for s in obj.get_signal_list():
-			for cs in obj.get_signal_connection_list(s.name):
-				obj.disconnect(s.name, cs.target, cs.method)
+		for d in ResourceLoader.get_dependencies(item.script.resource_path):
+			var dep_script = load(d)
+			if dep_script:
+				deps.append({obj = null, script = dep_script})
+	return deps + autoloaded
 
-		item.obj.set_script(null)
-	return autoloaded
-
-func _reset_autoloads(autoload_scripts: Array):
-	for item in autoload_scripts:
-		item.obj.set_script(item.script)
-		if item.obj.has_method("_ready"):
-			item.obj._ready()
-
-func instrument_autoloads():
-	var autoload_scripts = _collect_and_unload_autoloads()
+func instrument_autoloads(script_list: Array = []):
+	var autoload_scripts = _collect_autoloads()
 	autoload_scripts.invert()
 	for item in autoload_scripts:
 		_instrument_script(item.script)
-	_reset_autoloads(autoload_scripts)
 	return self
 
-func instrument_scripts(path: String, instrument_autoloads := true):
-	var autoload_scripts = _collect_and_unload_autoloads() if instrument_autoloads else []
+func instrument_scripts(path: String):
 	var list := _list_scripts_recursive(path)
 	for script in list:
 		_instrument_script(load(script))
-	if instrument_autoloads:
-		_reset_autoloads(autoload_scripts)
 	return self
 
 func _list_scripts_recursive(path: String, list := []) -> Array:

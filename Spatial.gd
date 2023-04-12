@@ -30,7 +30,8 @@ func _on_Timer_timeout():
 	add_child(custom_label)
 	custom_label.margin_top = 20
 	var other = Other.new()
-	$Label.text = Autoload1.fmt("timeout")
+	var text := Autoload1.fmt("timeout")
+	$Label.text = text
 	custom_label.custom_text = \
 		$Label.text
 	for i in range(2):
