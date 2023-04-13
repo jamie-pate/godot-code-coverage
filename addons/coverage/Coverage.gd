@@ -92,10 +92,10 @@ class ScriptCoverageCollector:
 			coverage_lines[line_number] = 0
 		coverage_lines[line_number] = coverage_lines[line_number] + 1
 
-	func _get_first_token(stripped_line: String) -> String:
-		var space_token = stripped_line.get_slice(" ", 0)
-		var tab_token = stripped_line.get_slice("\t", 0)
-		return space_token if len(space_token) < len(tab_token) else tab_token
+	func _get_token(stripped_line: String, skip := 0) -> String:
+		var space_token = stripped_line.get_slice(" ", skip)
+		var tab_token = stripped_line.get_slice("\t", skip)
+		return space_token if space_token && len(space_token) < len(tab_token) else tab_token
 
 	func _update_block_count(block_dict: Dictionary, line: String) -> void:
 		for key in block_dict:
@@ -114,7 +114,9 @@ class ScriptCoverageCollector:
 		while i < len(lines):
 			var stripped_line = lines[i].strip_edges()
 			var leading_whitespace = _get_leading_whitespace(lines[i])
-			var first_token = _get_first_token(stripped_line)
+			var first_token = _get_token(stripped_line)
+			if first_token == 'class_name':
+				first_token = _get_token(stripped_line, 2)
 			if first_token == 'extends':
 				return i + 1
 			# 	if (!p_class->constant_expressions.empty() || !p_class->subclasses.empty() || !p_class->functions.empty() || !p_class->variables.empty())
@@ -202,7 +204,7 @@ class ScriptCoverageCollector:
 				indent_stack.append(Indent.new(depth, state))
 				state = next_state
 			depth = line_depth
-			var first_token := _get_first_token(stripped_line)
+			var first_token := _get_token(stripped_line)
 			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
 			var block_count := _count_block(block)
 			# update the block count ( '(', '{' and '[' characters create a block )

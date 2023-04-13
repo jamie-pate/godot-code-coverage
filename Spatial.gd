@@ -1,5 +1,5 @@
 tool
-extends Spatial
+class_name Spatial1 extends Spatial
 
 const Other = preload("./Other.gd")
 const CustomLabel = preload("./CustomLabel.gd")
