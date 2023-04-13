@@ -191,16 +191,6 @@ class ScriptCoverageCollector:
 			if stripped_line == "" || stripped_line.begins_with("#"):
 				out_lines.append(line)
 				continue
-			if collector_var_line >= 0 && collector_var_line <= i:
-				# don't add the collector var if we aren't at the same depth
-				# e.g. Reference class where `extends` is the only line
-				if collector_var_depth < line_depth:
-					var s = get_script()
-					out_lines.append("%s%s" % [
-						leading_whitespace,
-						_collector_var(leading_whitespace, subclass_name, coverage_script_path, script.resource_path)
-					])
-				collector_var_line = -1
 
 			while line_depth < depth:
 				var indent = indent_stack.pop_back()
@@ -218,6 +208,18 @@ class ScriptCoverageCollector:
 				next_subclass_name = ''
 				state = next_state
 			depth = line_depth
+
+			if collector_var_line >= 0 && collector_var_line <= i:
+				# don't add the collector var if we aren't at the same depth
+				# e.g. Reference class where `extends` is the only line
+				if collector_var_depth < line_depth:
+					var s = get_script()
+					out_lines.append("%s%s" % [
+						leading_whitespace,
+						_collector_var(leading_whitespace, subclass_name, coverage_script_path, script.resource_path)
+					])
+				collector_var_line = -1
+
 			var first_token := _get_token(stripped_line)
 			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
 			var block_count := _count_block(block)

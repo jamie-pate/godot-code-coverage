@@ -19,10 +19,14 @@ class Inner:
 	static func fmt(value: String):
 		return 'Inner(%s)' % [value]
 
+class InnerExtends extends Reference:
+	func fmt(value: String):
+		return 'InterExtends(%s)' % [value]
+
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	var other = Other.new()
-	$Label.text = Inner.fmt(other.fmt("hello world"))
+	$Label.text = InnerExtends.new().fmt(Inner.fmt(other.fmt("hello world")))
 
 func _on_Timer_timeout():
 	print('add child')
