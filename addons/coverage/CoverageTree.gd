@@ -9,7 +9,6 @@ func _initialize():
 	for a in args:
 		if a.begins_with('--scene='):
 			_run_scene(a.replace('--scene=', ''))
-	print("initialize")
 
 func _run_scene(resource_path: String):
 	var packed_scene : PackedScene = load(resource_path)
@@ -18,5 +17,4 @@ func _run_scene(resource_path: String):
 	root.add_child(scene)
 
 func _finalize():
-	print("finalize")
-	Coverage.finalize(true)
+	Coverage.finalize(Coverage.Verbosity.AllFiles)

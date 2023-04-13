@@ -1,5 +1,19 @@
 extends Reference
 
+# verbosity levels:
+# None: not verbose
+# Filenames: coverage for each file,
+# FailingFiles: coverage for only files that failed to meet the file coverage target.
+# PartialFiles: coverage for each line (except when file coverage is 0%/100%)
+# AllFiles: coverage for each line for every file
+enum Verbosity {
+	None = 0,
+	Filenames = 1,
+	FailingFiles = 3,
+	PartialFiles = 4,
+	AllFiles = 5
+}
+
 class ScriptCoverageCollector:
 	extends Reference
 
@@ -62,14 +76,25 @@ class ScriptCoverageCollector:
 		return result.join("\n")
 
 	func _to_string():
+		return script_coverage(2)
+
+	func script_coverage(verbosity := Verbosity.None, target: float = INF):
 		var result := PoolStringArray()
 		var i = 0
-		for line in source_code.split("\n"):
-			result.append("%4d %s %s" % [
-				i, "%4dx" % [coverage_lines[i]] if i in coverage_lines else "     ", line
-			])
-			i += 1
-		result.append("%.1f%%" % [coverage_percent()])
+		var coverage_percent := coverage_percent()
+		var partial_show: bool = verbosity == Verbosity.PartialFiles && coverage_percent < 100 && coverage_percent > 0
+		var failed_show: bool = verbosity == Verbosity.FailingFiles && coverage_percent < target
+		var show_source = partial_show || failed_show || verbosity == Verbosity.AllFiles
+		var pass_fail := ""
+		if target != INF:
+			pass_fail = "(fail) " if coverage_percent < target else "(pass) "
+		result.append("%s%.1f%% %s" % [pass_fail, coverage_percent, script_path])
+		if show_source:
+			for line in source_code.split("\n"):
+				result.append("%4d %s %s" % [
+					i, "%4dx" % [coverage_lines[i]] if i in coverage_lines else "     ", line
+				])
+				i += 1
 		return result.join("\n")
 
 	func coverage_count() -> int:
@@ -224,6 +249,8 @@ var _scene_tree: SceneTree
 var _exclude_paths := []
 var _enforce_node_coverage := false
 var _autoloads_instrumented := false
+var _coverage_target_file := INF
+var _coverage_target_total := INF
 
 func _init(scene_tree: SceneTree, exclude_paths := []):
 	_exclude_paths += exclude_paths
@@ -239,10 +266,10 @@ func enforce_node_coverage():
 	_on_tree_changed()
 	return self
 
-func _finalize(print_verbose := false):
+func _finalize(print_verbosity := 0):
 	if _enforce_node_coverage:
 		_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
-	print(script_coverage(print_verbose))
+	print(script_coverage(print_verbosity))
 
 func get_coverage_collector(script_name: String):
 	return coverage_collectors[script_name] if script_name in coverage_collectors else null
@@ -263,21 +290,41 @@ func coverage_percent() -> float:
 	var clc = coverage_line_count()
 	return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
 
-func script_coverage(verbose := false):
+func set_coverage_targets(total: float, file: float) -> void:
+	_coverage_target_total = total
+	_coverage_target_file = file
+
+func coverage_passing() -> bool:
+	var all_files_passing := true
+	for script in coverage_collectors:
+		var script_percent = coverage_collectors[script].coverage_percent()
+		all_files_passing = all_files_passing && script_percent > _coverage_target_file
+	return coverage_percent() > _coverage_target_total && all_files_passing
+
+# see ScriptCoverage.Verbosity for verbosity levels
+func script_coverage(verbosity := 0):
 	var result = PoolStringArray()
 	var coverage_count := 0
 	var coverage_lines := 0
-	if verbose:
+	var coverage_percent := coverage_percent()
+	var pass_fail := ""
+	if _coverage_target_total != INF:
+		pass_fail = "(fail) " if coverage_percent < _coverage_target_total else "(pass) "
+	var multiline := false
+	if verbosity > Verbosity.None:
 		for script in coverage_collectors:
-			result.append("%s:" % [script])
-			result.append("%s" % [coverage_collectors[script]])
-	result.append("Coverage: %s/%s %.1f%%" % [
+			var file_coverage = coverage_collectors[script].script_coverage(verbosity, _coverage_target_file)
+			result.append("%s" % [file_coverage])
+			if file_coverage.match("*\n*"):
+				multiline = true
+	result.append("%s%.1f%% Total Coverage: %s/%s lines" % [
+		pass_fail,
+		coverage_percent,
 		coverage_count(),
-		coverage_line_count(),
-		coverage_percent()
+		coverage_line_count()
 	])
 
-	return result.join("\n\n")
+	return result.join("\n\n" if multiline else "\n")
 
 func _on_tree_changed():
 	_ensure_node_script_instrumentation(_scene_tree.root)
@@ -408,6 +455,6 @@ static func instance():
 	assert(STATIC_VARS.instance, "No instance has been created, use Coverage.new(get_tree()) first.")
 	return STATIC_VARS.instance
 
-static func finalize(print_verbose := false) -> void:
-	STATIC_VARS.instance._finalize(print_verbose)
+static func finalize(print_verbosity := 0) -> void:
+	STATIC_VARS.instance._finalize(print_verbosity)
 	STATIC_VARS.instance = NullCoverage.new()

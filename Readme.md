@@ -45,10 +45,12 @@ See this project's `tests/pre_run_hook.gd`, `tests/post_run_hook.gd` and `.gutco
 * `func enforce_node_coverage()`: Enables monitoring on scene tree updates and asserts that all nodes must have script coverage.
     * Returns `self` for chaining
 * `func get_coverage_collector(script_name: String) -> ScriptCoverageCollector`: Obtain the coverage collector for a specific script path, or null if it doesn't exist.
+* `func set_coverage_targets(total: float, file: float)`: Set targets for coverage. Should be called before `finalize()`
+* `func coverage_passing() -> bool`: Check coverage targets and return true if they are all passing.
 * `func coverage_count() -> int`: Return the total number of lines which have been covered for all scripts.
 * `func coverage_line_count() -> int`: Return the total number of lines which have been instrumented for the all script.
 * `func coverage_percent() -> int`: Return the aggregate coverage percent (out of 100%) for all scripts.
-* `func script_coverage(verbose := false) -> String`: Return a string which describes the script coverage. If verbose is true then coverage for each file will be described.
+* `func script_coverage(verbosity := Coverage.Verbosity.None) -> String`: Return a string which describes the script coverage. Check Coverage.Verbosity for possible values
 
 #### `ScriptCoverageCollector` class:
 
@@ -57,6 +59,7 @@ An internal class which instruments a single GDScript and collects line coverage
 * `func coverage_count() -> int`: Return the number of lines which have been covered for the script.
 * `func coverage_line_count() -> int`: Return the total number of lines which have been instrumented for the script.
 * `func coverage_percent() -> int`: Return the coverage percent (out of 100%) for the script.
+* `func script_coverage(verbosity := Coverage.Verbosity.None, target_coverage: float) -> String`: Return a string which describes coverage for the script.
 
 #### API Examples
 
@@ -70,6 +73,7 @@ extends "res://addons/gut/hook_script.gd"
 const Coverage = preload("res://addons/coverage/Coverage.gd")
 const exclude_paths = [
 	"res://addons/*",
+	# NOTE: Godot may crash if you try to instrument the script that's calling instrument_scripts()
 	"res://tests/*",
 	"res://contrib/*"
 ]
@@ -86,18 +90,22 @@ extends "res://addons/gut/hook_script.gd"
 
 const Coverage = preload("res://addons/coverage/Coverage.gd")
 
-const COVERAGE_TARGET = 91.0
+const COVERAGE_TARGET := 75.0
+const FILE_TARGET := 33.0
 
 func run():
-	var coverage_percent = Coverage.instance().coverage_percent()
-	Coverage.instance().finalize(true)
+	var coverage = Coverage.instance()
+	coverage.set_coverage_targets(COVERAGE_TARGET, FILE_TARGET)
+	var verbosity = Coverage.Verbosity.FailingFiles
+	coverage.finalize(verbosity)
 	var logger = gut.get_logger()
-	if coverage_percent < COVERAGE_TARGET:
-		logger.failed("Coverage target of %.1f%% was not met" % [COVERAGE_TARGET])
+	var coverage_passing = coverage.coverage_passing()
+	if !coverage_passing:
+		logger.failed("Coverage target of %.1f%% total (%.1f%% file) was not met" % [COVERAGE_TARGET, FILE_TARGET])
 		set_exit_code(2)
 	else:
 		gut.set_log_level(gut.LOG_LEVEL_ALL_ASSERTS)
-		logger.passed("Coverage target of %.1f%%" % [COVERAGE_TARGET])
+		logger.passed("Coverage target of %.1f%% total, %.1f%% file coverage" % [COVERAGE_TARGET, FILE_TARGET])
 ```
 
 You may use the `CoverageTree.gd` as an example of the simplest use of the api.
@@ -115,7 +123,7 @@ func _initialize():
     add_child(packed_scene.instance())
 
 func _finalize():
-    Coverage.finalize(true)
+    Coverage.finalize(Coverage.Verbosity.AllFiles)
 
 ```
 
