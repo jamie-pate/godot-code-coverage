@@ -264,6 +264,16 @@ class ScriptCoverageCollector:
 			out_lines.append(line)
 		return out_lines.join("\n")
 
+# this is a placeholder class for when we've finalized and don't want coverage anymore
+# some scripts will continue to be instrumented so we must have something to accept all these calls
+class NullCoverage:
+	extends Reference
+	func get_coverage_collector(_script_name: String):
+		return self
+
+	func add_line_coverage(_line: int):
+		pass
+
 const STATIC_VARS := {instance=null}
 var coverage_collectors := {}
 var _scene_tree: SceneTree
@@ -456,4 +466,4 @@ static func instance():
 
 static func finalize(print_verbose := false) -> void:
 	STATIC_VARS.instance._finalize(print_verbose)
-	STATIC_VARS.instance = null
+	STATIC_VARS.instance = NullCoverage.new()
