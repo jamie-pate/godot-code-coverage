@@ -9,12 +9,10 @@ class ScriptCoverageCollector:
 		43: "PARSE_ERROR"
 	}
 
-
 	var coverage_lines := {}
 	var script_path := ""
 	var source_code := ""
 	var covered_script: Script
-	var _collector_var_name := ""
 
 	class Indent:
 		extends Reference
@@ -28,7 +26,6 @@ class ScriptCoverageCollector:
 			depth = _depth
 			state = _state
 			subclass_name = _subclass_name
-
 
 	func _init(coverage_script_path: String, _script_path: String) -> void:
 		script_path = _script_path
@@ -110,24 +107,6 @@ class ScriptCoverageCollector:
 			result += block_dict[key]
 		return result
 
-	func _find_next_extends(i: int, lines: Array) -> int:
-		var last_whitespace = _get_leading_whitespace(lines[i])
-		var result := i
-		while i < len(lines):
-			var stripped_line = lines[i].strip_edges()
-			var leading_whitespace = _get_leading_whitespace(lines[i])
-			var first_token = _get_token(stripped_line)
-			if first_token == 'class_name':
-				first_token = _get_token(stripped_line, 2)
-			if first_token == 'extends':
-				return i + 1
-			# 	if (!p_class->constant_expressions.empty() || !p_class->subclasses.empty() || !p_class->functions.empty() || !p_class->variables.empty())
-			if last_whitespace != leading_whitespace || first_token && first_token in ['const', 'class', 'func', 'var', 'onready', 'export']:
-				break
-			i += 1
-		# if we make it here then there is an implicit 'extends Object' and we don't need to worry
-		return result
-
 	func _get_leading_whitespace(line: String) -> String:
 		var leading_whitespace := PoolStringArray()
 		for chr in range(len(line)):
@@ -142,19 +121,6 @@ class ScriptCoverageCollector:
 				coverage_script_path,
 				script_resource_path
 			]
-
-	func _collector_var_name(subclass_name: String) -> String:
-		return "%s_%s__" % [_collector_var_name, subclass_name]
-
-	func _collector_var(leading_whitespace: String, subclass_name: String, coverage_script_path: String, script_resource_path: String) -> String:
-		var var_name = _collector_var_name(subclass_name)
-		return "\n" + leading_whitespace + PoolStringArray([
-			"var %s" % [var_name],
-			"func %s(line):" % [var_name],
-			"\tif !%s:" % [var_name],
-			"\t\t%s = %s" % [var_name, _get_coverage_collector_expr(coverage_script_path, script_resource_path)],
-			"\t%s.add_line_coverage(line)" % [var_name]
-		]).join('\n%s' % [leading_whitespace])
 
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
 		var lines = script.source_code.split("\n")
@@ -173,35 +139,41 @@ class ScriptCoverageCollector:
 			'()': 0,
 			'[]': 0
 		}
-		# the collector var must be placed after 'extends' but
-		# should be skipped if the source code un-indents before it's added
-		var collector_var_line := _find_next_extends(0, lines)
-		var collector_var_depth := -1
-		var add_collector_var := false
+		# the collector var must be placed after 'extends' b
 		var continuation := false
-		_collector_var_name = "__script_coverage_collector%s" % [id]
-
 
 		for line_ in lines:
 			i += 1
 			var line := line_ as String
-			var leading_whitespace := _get_leading_whitespace(line)
-			var line_depth = len(leading_whitespace)
 			var stripped_line := line.strip_edges()
 			if stripped_line == "" || stripped_line.begins_with("#"):
 				out_lines.append(line)
 				continue
+			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
+			var block_count := _count_block(block)
+			# update the block count ( '(', '{' and '[' characters create a block )
+			_update_block_count(block, stripped_line)
+			# if we are in a block or have a continuation from the last line
+			# don't add instrumentation
+			var skip := block_count > 0 || continuation
+			continuation = stripped_line.ends_with('\\')
+			if skip:
+				out_lines.append(line)
+				continue
 
+			var leading_whitespace := _get_leading_whitespace(line)
+			var line_depth = len(leading_whitespace)
 			while line_depth < depth:
 				var indent = indent_stack.pop_back()
+				if DEBUG_SCRIPT_COVERAGE:
+					print("\t\t\t\tPOP_LINE_DEPTH %s > %s (%s) %s  (was %s) %s" % [depth, indent.depth, state, indent.subclass_name, subclass_name, subclass_name && subclass_name != indent.subclass_name])
 				depth = indent.depth
 				state = indent.state
+				next_state = indent.state
 				subclass_name = indent.subclass_name
-				if DEBUG_SCRIPT_COVERAGE:
-					print("POP_LINE_DEPTH %s > %s (%s) %s  (was %s)" % [depth, indent.depth, state, indent.subclass_name, subclass_name])
 			if line_depth > depth:
 				if DEBUG_SCRIPT_COVERAGE:
-					print("PUSH_LINE_DEPTH %s > %s (%s > %s) %s" % [depth, line_depth, state, next_state, subclass_name])
+					print("\t\t\t\tPUSH_LINE_DEPTH %s > %s (%s > %s) %s" % [depth, line_depth, state, next_state, subclass_name])
 				indent_stack.append(Indent.new(depth, state, subclass_name))
 				if next_subclass_name:
 					subclass_name = next_subclass_name
@@ -209,35 +181,12 @@ class ScriptCoverageCollector:
 				state = next_state
 			depth = line_depth
 
-			if collector_var_line >= 0 && collector_var_line <= i:
-				# don't add the collector var if we aren't at the same depth
-				# e.g. Reference class where `extends` is the only line
-				if collector_var_depth < line_depth:
-					var s = get_script()
-					out_lines.append("%s%s" % [
-						leading_whitespace,
-						_collector_var(leading_whitespace, subclass_name, coverage_script_path, script.resource_path)
-					])
-				collector_var_line = -1
-
 			var first_token := _get_token(stripped_line)
-			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
-			var block_count := _count_block(block)
-			# update the block count ( '(', '{' and '[' characters create a block )
-			_update_block_count(block, stripped_line)
-			# if we are in a block or have a continuation from the last line or start with # (comment)
-			# don't add instrumentation
-
-			var skip := block_count > 0 || continuation
-			continuation = stripped_line.ends_with('\\')
-
 			match first_token:
 				"func":
 					next_state = Indent.State.Func
 				"class":
 					next_state = Indent.State.Class
-					collector_var_line = _find_next_extends(i + 1, lines)
-					collector_var_depth = depth
 					next_subclass_name = _get_token(stripped_line, 1).trim_suffix(":")
 				"static":
 					next_state = Indent.State.StaticFunc
@@ -245,20 +194,15 @@ class ScriptCoverageCollector:
 					skip = true
 				"match":
 					next_state = Indent.State.Match
-			if state == Indent.State.Match && stripped_line.ends_with(":"):
+			if state == Indent.State.Match:
 				next_state = Indent.State.MatchPattern
 			elif state == Indent.State.MatchPattern:
 				next_state = Indent.State.Func
 			if !skip && state in [Indent.State.Func, Indent.State.StaticFunc]:
-				var fn_call = _collector_var_name(subclass_name)
-				if state == Indent.State.StaticFunc:
-					fn_call = "%s.add_line_coverage" % [
-						_get_coverage_collector_expr(coverage_script_path, script.resource_path)
-					]
 				coverage_lines[i] = 0
-				out_lines.append("%s%s(%s)" % [
+				out_lines.append("%s%s.add_line_coverage(%s)" % [
 					leading_whitespace,
-					fn_call,
+					_get_coverage_collector_expr(coverage_script_path, script.resource_path),
 					i
 				])
 			out_lines.append(line)
