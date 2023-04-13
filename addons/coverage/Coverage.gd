@@ -14,69 +14,46 @@ enum Verbosity {
 	AllFiles = 5
 }
 
-class ScriptCoverageCollector:
+class ScriptCoverage:
 	extends Reference
-
-	const DEBUG_SCRIPT_COVERAGE := false
-	const STATIC_VARS := {last_script_id = 0}
-	const ERR_MAP := {
-		43: "PARSE_ERROR"
-	}
 
 	var coverage_lines := {}
 	var script_path := ""
 	var source_code := ""
-	var covered_script: Script
 
-	class Indent:
-		extends Reference
-		enum State {None, Class, Func, StaticFunc, Match, MatchPattern}
-
-		var depth: int
-		var state: int
-		var subclass_name: String
-
-		func _init(_depth: int, _state: int, _subclass_name: String):
-			depth = _depth
-			state = _state
-			subclass_name = _subclass_name
-
-	func _init(coverage_script_path: String, _script_path: String) -> void:
+	func _init(_script_path: String, load_source_code := true) -> void:
 		script_path = _script_path
-		var script = load(_script_path)
-		if DEBUG_SCRIPT_COVERAGE:
-			print(script)
-		covered_script = script
-		source_code = script.source_code
-		var id = STATIC_VARS.last_script_id + 1
-		STATIC_VARS.last_script_id = id
-		script.source_code = _interpolate_coverage(coverage_script_path, script, id)
-		if DEBUG_SCRIPT_COVERAGE:
-			print(script.source_code)
-		# if we pass 'keep_state = true' to reload() then we can reload the script
-		# without removing it from all the nodes.
-		# this requires us to add a function call for each line that checks to make
-		# sure the coverage variable is set before calling add_line_coverage
-		var err = script.reload(true)
+		var f := File.new()
+		var err := f.open(_script_path, File.READ)
+		assert(err == OK, "Unable to open %s for reading" % [_script_path])
+		source_code = f.get_as_text()
+		f.close()
 
-		assert(err == OK, "Error reloading %s: error: %s\n-------\n%s" % [
-			script.resource_path,
-			ERR_MAP[err] if err in ERR_MAP else err,
-			_add_line_numbers(script.source_code)
-		])
-		if DEBUG_SCRIPT_COVERAGE:
-			print("new script resource_path %s" % [covered_script.resource_path])
+	func coverage_count() -> int:
+		var count = 0
+		for line in coverage_lines:
+			if coverage_lines[line] > 0:
+				count += 1
+		return count
 
-	func _add_line_numbers(source_code: String) -> String:
-		var result := PoolStringArray()
-		var i := 0
-		for line in source_code.split("\n"):
-			result.append("%4d: %s" % [i, line])
-			i += 1
-		return result.join("\n")
+	func coverage_line_count() -> int:
+		return len(coverage_lines)
 
-	func _to_string():
-		return script_coverage(2)
+	func coverage_percent() -> float:
+		var clc = coverage_line_count()
+		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
+
+	func add_line_coverage(line_number: int, count := 1) -> void:
+		if !line_number in coverage_lines:
+			coverage_lines[line_number] = 0
+		coverage_lines[line_number] = coverage_lines[line_number] + count
+
+	func get_coverage_json() -> Dictionary:
+		return coverage_lines.duplicate()
+
+	func merge_coverage_json(coverage_json: Dictionary) -> void:
+		for line_number in coverage_json:
+			add_line_coverage(int(line_number), coverage_json[line_number])
 
 	func script_coverage(verbosity := Verbosity.None, target: float = INF):
 		var result := PoolStringArray()
@@ -97,24 +74,64 @@ class ScriptCoverageCollector:
 				i += 1
 		return result.join("\n")
 
-	func coverage_count() -> int:
-		var count = 0
-		for line in coverage_lines:
-			if coverage_lines[line] > 0:
-				count += 1
-		return count
+class ScriptCoverageCollector:
+	extends ScriptCoverage
 
-	func coverage_line_count() -> int:
-		return len(coverage_lines)
+	const DEBUG_SCRIPT_COVERAGE := false
+	const STATIC_VARS := {last_script_id = 0}
+	const ERR_MAP := {
+		43: "PARSE_ERROR"
+	}
 
-	func coverage_percent() -> float:
-		var clc = coverage_line_count()
-		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
+	var covered_script: Script
 
-	func add_line_coverage(line_number) -> void:
-		if !line_number in coverage_lines:
-			coverage_lines[line_number] = 0
-		coverage_lines[line_number] = coverage_lines[line_number] + 1
+	class Indent:
+		extends Reference
+		enum State {None, Class, Func, StaticFunc, Match, MatchPattern}
+
+		var depth: int
+		var state: int
+		var subclass_name: String
+
+		func _init(_depth: int, _state: int, _subclass_name: String):
+			depth = _depth
+			state = _state
+			subclass_name = _subclass_name
+
+	func _init(coverage_script_path: String, _script_path: String).(_script_path, false) -> void:
+		var id = STATIC_VARS.last_script_id + 1
+		STATIC_VARS.last_script_id = id
+		covered_script = load(_script_path)
+		source_code = covered_script.source_code
+		if DEBUG_SCRIPT_COVERAGE:
+			print(covered_script)
+		covered_script.source_code = _interpolate_coverage(coverage_script_path, covered_script, id)
+		if DEBUG_SCRIPT_COVERAGE:
+			print(covered_script.source_code)
+		# if we pass 'keep_state = true' to reload() then we can reload the script
+		# without removing it from all the nodes.
+		# this requires us to add a function call for each line that checks to make
+		# sure the coverage variable is set before calling add_line_coverage
+		var err = covered_script.reload(true)
+
+		assert(err == OK, "Error reloading %s: error: %s\n-------\n%s" % [
+			covered_script.resource_path,
+			ERR_MAP[err] if err in ERR_MAP else err,
+			_add_line_numbers(covered_script.source_code)
+		])
+		if DEBUG_SCRIPT_COVERAGE:
+			print("new script resource_path %s" % [covered_script.resource_path])
+
+	func _add_line_numbers(source_code: String) -> String:
+		var result := PoolStringArray()
+		var i := 0
+		for line in source_code.split("\n"):
+			result.append("%4d: %s" % [i, line])
+			i += 1
+		return result.join("\n")
+
+	func _to_string():
+		return script_coverage(2)
 
 	func _get_token(stripped_line: String, skip := 0) -> String:
 		var space_token = stripped_line.get_slice(" ", skip)
@@ -245,14 +262,14 @@ class NullCoverage:
 
 const STATIC_VARS := {instance=null}
 var coverage_collectors := {}
-var _scene_tree: SceneTree
+var _scene_tree: MainLoop
 var _exclude_paths := []
 var _enforce_node_coverage := false
 var _autoloads_instrumented := false
 var _coverage_target_file := INF
 var _coverage_target_total := INF
 
-func _init(scene_tree: SceneTree, exclude_paths := []):
+func _init(scene_tree: MainLoop, exclude_paths := []):
 	_exclude_paths += exclude_paths
 	assert(!STATIC_VARS.instance, "Only one instance of this class is allowed")
 	STATIC_VARS.instance = self
@@ -325,6 +342,47 @@ func script_coverage(verbosity := 0):
 	])
 
 	return result.join("\n\n" if multiline else "\n")
+
+func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool:
+	var f := File.new()
+	var err := f.open(filename, File.READ)
+	if err != OK:
+		printerr("Error %s opening %s for reading", [err, filename])
+		return false
+	var parsed = JSON.parse(f.get_as_text());
+	f.close()
+	if parsed.error != OK:
+		printerr("Error %s on line %s parsing %s", [parsed.error, parsed.error_line, filename])
+		printerr(parsed.error_string)
+		return false
+	if !parsed.result is Dictionary:
+		printerr("Error: content of %s expected to be a dictionary" % [filename])
+		return false
+	for script_path in parsed.result:
+		if !parsed.result[script_path] is Dictionary:
+			printerr("Error: %s in %s is expected to be a dictionary" % [
+				script_path, filename
+			])
+			return false
+		if auto_instrument:
+			_instrument_script(load(script_path))
+		elif !script_path in coverage_collectors:
+			coverage_collectors[script_path] = ScriptCoverage.new(script_path)
+		coverage_collectors[script_path].merge_coverage_json(parsed.result[script_path])
+	return true
+
+func save_coverage_file(filename: String) -> bool:
+	var coverage := {}
+	for script_path in coverage_collectors:
+		coverage[script_path] = coverage_collectors[script_path].get_coverage_json()
+	var f := File.new()
+	var err := f.open(filename, File.WRITE)
+	if err != OK:
+		printerr("Error %s opening %s for writing" % [err, filename])
+		return false
+	f.store_string(JSON.print(coverage))
+	f.close()
+	return true
 
 func _on_tree_changed():
 	_ensure_node_script_instrumentation(_scene_tree.root)
@@ -404,7 +462,8 @@ func _collect_autoloads():
 	_autoloads_instrumented = true
 	var autoloaded := []
 	var obj_set := {}
-	var root := _scene_tree.root
+	assert(_scene_tree is SceneTree, "Cannot collect autoloads from %s because it is not a SceneTree" % [ _scene_tree ])
+	var root := (_scene_tree as SceneTree).root
 	for n in root.get_children():
 		var setting_name = "autoload/%s" % [n.name]
 		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ""

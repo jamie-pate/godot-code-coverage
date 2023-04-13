@@ -17,4 +17,8 @@ func _run_scene(resource_path: String):
 	root.add_child(scene)
 
 func _finalize():
+	var coverage = Coverage.instance()
+	var coverage_file := OS.get_environment("COVERAGE_FILE") if OS.has_environment("COVERAGE_FILE") else ""
+	if coverage_file:
+		coverage.save_coverage_file(coverage_file)
 	Coverage.finalize(Coverage.Verbosity.AllFiles)
