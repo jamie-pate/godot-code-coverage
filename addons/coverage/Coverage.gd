@@ -14,18 +14,20 @@ class ScriptCoverageCollector:
 	var script_path := ""
 	var source_code := ""
 	var covered_script: Script
-	var collector_var_name := ""
+	var _collector_var_name := ""
 
 	class Indent:
 		extends Reference
 		enum State {None, Class, Func, StaticFunc, Match, MatchPattern}
 
-		var depth := 0
-		var state:int = State.None
+		var depth: int
+		var state: int
+		var subclass_name: String
 
-		func _init(_depth: int, _state: int):
+		func _init(_depth: int, _state: int, _subclass_name: String):
 			depth = _depth
 			state = _state
+			subclass_name = _subclass_name
 
 
 	func _init(coverage_script_path: String, _script_path: String) -> void:
@@ -141,13 +143,17 @@ class ScriptCoverageCollector:
 				script_resource_path
 			]
 
-	func _collector_var(leading_whitespace: String, coverage_script_path: String, script_resource_path: String) -> String:
+	func _collector_var_name(subclass_name: String) -> String:
+		return "%s_%s__" % [_collector_var_name, subclass_name]
+
+	func _collector_var(leading_whitespace: String, subclass_name: String, coverage_script_path: String, script_resource_path: String) -> String:
+		var var_name = _collector_var_name(subclass_name)
 		return "\n" + leading_whitespace + PoolStringArray([
-			"var %s" % [collector_var_name],
-			"func %s(line):" % [collector_var_name],
-			"\tif !%s:" % [collector_var_name],
-			"\t\t%s = %s" % [collector_var_name, _get_coverage_collector_expr(coverage_script_path, script_resource_path)],
-			"\t%s.add_line_coverage(line)" % [collector_var_name]
+			"var %s" % [var_name],
+			"func %s(line):" % [var_name],
+			"\tif !%s:" % [var_name],
+			"\t\t%s = %s" % [var_name, _get_coverage_collector_expr(coverage_script_path, script_resource_path)],
+			"\t%s.add_line_coverage(line)" % [var_name]
 		]).join('\n%s' % [leading_whitespace])
 
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
@@ -156,6 +162,8 @@ class ScriptCoverageCollector:
 		var ld_stack := []
 		var state:int = Indent.State.None
 		var next_state: int = Indent.State.None
+		var subclass_name: String
+		var next_subclass_name: String
 		var depth := 0
 		var out_lines := PoolStringArray()
 		# 0 based, start with -1 so that the first increment will give 0
@@ -171,7 +179,7 @@ class ScriptCoverageCollector:
 		var collector_var_depth := -1
 		var add_collector_var := false
 		var continuation := false
-		collector_var_name = "__script_coverage_collector%s__" % [id]
+		_collector_var_name = "__script_coverage_collector%s" % [id]
 
 
 		for line_ in lines:
@@ -180,7 +188,7 @@ class ScriptCoverageCollector:
 			var leading_whitespace := _get_leading_whitespace(line)
 			var line_depth = len(leading_whitespace)
 			var stripped_line := line.strip_edges()
-			if stripped_line == "":
+			if stripped_line == "" || stripped_line.begins_with("#"):
 				out_lines.append(line)
 				continue
 			if collector_var_line >= 0 && collector_var_line <= i:
@@ -190,7 +198,7 @@ class ScriptCoverageCollector:
 					var s = get_script()
 					out_lines.append("%s%s" % [
 						leading_whitespace,
-						_collector_var(leading_whitespace, coverage_script_path, script.resource_path)
+						_collector_var(leading_whitespace, subclass_name, coverage_script_path, script.resource_path)
 					])
 				collector_var_line = -1
 
@@ -198,10 +206,16 @@ class ScriptCoverageCollector:
 				var indent = indent_stack.pop_back()
 				depth = indent.depth
 				state = indent.state
+				subclass_name = indent.subclass_name
 				if DEBUG_SCRIPT_COVERAGE:
-					print("POP_LINE_DEPTH %s %s" % [depth, state])
+					print("POP_LINE_DEPTH %s > %s (%s) %s  (was %s)" % [depth, indent.depth, state, indent.subclass_name, subclass_name])
 			if line_depth > depth:
-				indent_stack.append(Indent.new(depth, state))
+				if DEBUG_SCRIPT_COVERAGE:
+					print("PUSH_LINE_DEPTH %s > %s (%s > %s) %s" % [depth, line_depth, state, next_state, subclass_name])
+				indent_stack.append(Indent.new(depth, state, subclass_name))
+				if next_subclass_name:
+					subclass_name = next_subclass_name
+				next_subclass_name = ''
 				state = next_state
 			depth = line_depth
 			var first_token := _get_token(stripped_line)
@@ -212,7 +226,7 @@ class ScriptCoverageCollector:
 			# if we are in a block or have a continuation from the last line or start with # (comment)
 			# don't add instrumentation
 
-			var skip := block_count > 0 || continuation || stripped_line.begins_with('#')
+			var skip := block_count > 0 || continuation
 			continuation = stripped_line.ends_with('\\')
 
 			match first_token:
@@ -222,6 +236,7 @@ class ScriptCoverageCollector:
 					next_state = Indent.State.Class
 					collector_var_line = _find_next_extends(i + 1, lines)
 					collector_var_depth = depth
+					next_subclass_name = _get_token(stripped_line, 1).trim_suffix(":")
 				"static":
 					next_state = Indent.State.StaticFunc
 				"else:", "elif":
@@ -233,7 +248,7 @@ class ScriptCoverageCollector:
 			elif state == Indent.State.MatchPattern:
 				next_state = Indent.State.Func
 			if !skip && state in [Indent.State.Func, Indent.State.StaticFunc]:
-				var fn_call = collector_var_name
+				var fn_call = _collector_var_name(subclass_name)
 				if state == Indent.State.StaticFunc:
 					fn_call = "%s.add_line_coverage" % [
 						_get_coverage_collector_expr(coverage_script_path, script.resource_path)
@@ -334,7 +349,7 @@ func _instrument_script(script: GDScript) -> void:
 	var script_path = script.resource_path
 	var coverage_script_path = get_script().resource_path
 	if !script_path:
-		print("script has no path: %s" % [script.source_code])
+		printerr("script has no path: %s" % [script.source_code])
 
 	if !_excluded(script_path) && script_path && !script_path in coverage_collectors:
 		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path ,script_path)
@@ -359,7 +374,6 @@ func instrument_scene_scripts(scene: PackedScene):
 func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
 	# prevent cycles
 	obj_set[obj] = true
-	print("collect script from %s" % [obj])
 	assert(obj && obj.get_script(), "Couldn't collect script from %s" % [obj])
 	if obj.get_script() && !_excluded(obj.get_script().resource_path):
 		objs.append({
@@ -385,7 +399,6 @@ func _collect_script_objects(obj: Object, objs: Array, obj_set: Dictionary):
 func _collect_autoloads():
 	assert(!_autoloads_instrumented, "Tried to collect autoloads twice?")
 	_autoloads_instrumented = true
-	print('collect autoloads')
 	var autoloaded := []
 	var obj_set := {}
 	var root := _scene_tree.root
@@ -393,7 +406,6 @@ func _collect_autoloads():
 		var setting_name = "autoload/%s" % [n.name]
 		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ""
 		if autoload_setting:
-			print('collect autoload %s' % [n])
 			_collect_script_objects(n, autoloaded, obj_set)
 	autoloaded.invert()
 	var deps := []
