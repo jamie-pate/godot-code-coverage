@@ -41,7 +41,7 @@ class ScriptCoverage:
 
 	func coverage_percent() -> float:
 		var clc = coverage_line_count()
-		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
+		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else 100.0
 
 	func add_line_coverage(line_number: int, count := 1) -> void:
 		if !line_number in coverage_lines:
@@ -305,7 +305,7 @@ func coverage_line_count() -> int:
 
 func coverage_percent() -> float:
 	var clc = coverage_line_count()
-	return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else NAN
+	return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else 100.0
 
 func set_coverage_targets(total: float, file: float) -> void:
 	_coverage_target_total = total
