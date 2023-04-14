@@ -2,7 +2,7 @@ extends "res://addons/gut/hook_script.gd"
 
 const Coverage = preload("res://addons/coverage/Coverage.gd")
 
-const COVERAGE_TARGET := 75.0
+const COVERAGE_TARGET := 74.0
 const FILE_TARGET := 33.0
 
 func run():

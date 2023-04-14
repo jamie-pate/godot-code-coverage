@@ -6,12 +6,13 @@ var _quit := false
 var _exit_code := 0
 
 func _print_usage():
-	print("""Usage: godot -s res://addons/coverage/merge_coverage.gd  [flags] input_coverage1.json input_coverage2.json [...input_coverageN.json]
+	print("""Usage: godot -s res://addons/coverage/merge_coverage.gd  [flags] coverage1.json coverage2.json [...coverageN.json]
 	Merges multiple input
 	flags:
-		--target 100 : set the coverage target, exit with failure if the target isn't met over all files
-		--file-target 100 : set the coverage target for individual files. exit with failure if the target isn't met
-		--output-file output_coverage.json : Save the merged coverage to this file
+		--verbosity 3 : Set the verbosity of the coverage output. See Coverage.gd:Verbosity for levels.
+		--target 100 : set the coverage target, exit with failure if the target isn't met over all files.
+		--file-target 100 : set the coverage target for individual files. exit with failure if the target isn't met.
+		--output-file output.json : Save the merged coverage to this file.
 	""")
 
 func _initialize():
@@ -20,6 +21,7 @@ func _initialize():
 	var coverage_target := INF
 	var file_target := INF
 	var output_filename := ''
+	var verbosity:int = Coverage.Verbosity.FailingFiles
 	while len(args) && args[0].begins_with("-"):
 		var flag = args.pop_front()
 		match flag:
@@ -35,12 +37,14 @@ func _initialize():
 			"--output-file":
 				if len(args):
 					output_filename = args.pop_front()
+			"--verbosity":
+				if len(args):
+					verbosity = int(args.pop_front())
 	var files := args
 	if len(files) < 2:
 		_print_usage()
 		quit()
 		return
-	var output_file:String = files.pop_front()
 	var reports := []
 	var result := true
 	for filename in files:
@@ -52,7 +56,7 @@ func _initialize():
 	if output_filename:
 		coverage.save_coverage_file(output_filename)
 	coverage.set_coverage_targets(coverage_target, file_target)
-	coverage.finalize(Coverage.Verbosity.FailingFiles)
+	coverage.finalize(verbosity)
 	if !coverage.coverage_passing():
 		quit(1)
 	else:

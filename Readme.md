@@ -6,7 +6,7 @@ Currently supports Godot 3.5
 
 ### Getting Started
 
-To run the tests in this example repo you should run `./update_addons.sh`
+Before running tests in this example repo you should first run `./update_addons.sh`
 
 ### Usage
 
@@ -20,12 +20,34 @@ or to run coverage directly without GUT you can use
 
 After the `Coverage` instance is created and until `Coverage.instance().finalize()` the singleton will monitor the scene tree and ensure that no nodes are added with GDScript which are not excluded or instrumented.
 
+`run_tests.sh path/to/godot` will run both examples and merge the coverage results.
+
+* You can pass additional arguments to run_tests to specify the coverage targets:
+	* e.g. `run_tests.sh path/to/godot 99 90 4` will require 99% total coverage and 90% file coverage, which will cause the test to fail, while setting verbosity to 4.
+
 ### Coverage Requirements
 
 So far coverage requirements are left to the consumer. You can call `Coverage.instance().get_percent()` to get the full coverage percentage
 and make a pass/fail decision based on that number. If you are using the `Gut` addon you can put this in a post run hook.
 
 See this project's `tests/pre_run_hook.gd`, `tests/post_run_hook.gd` and `.gutconfig.json` for examples.
+
+### Merging Coverage
+
+You may have multiple separate test environments which require separate runs with coverage. In this case you can
+combine the coverage from multiple test runs to meet an overall coverage target.
+
+You can output a JSON file during tests using `Coverage.save_coverage_file(filename)`, then pass multiple coverage files to the `addons/merge_coverage.gd` script.
+
+`godot -s addons/coverage/merge_coverage.gd [flags] file1.json file2.json [...fileN.json]`
+
+flags:
+* `--verbosity 3` : Set the verbosity of the coverage output. See Coverage.gd:Verbosity for levels.
+* `--target 100` : set the coverage target, exit with failure if the target isn't met over all files
+* `--file-target 100` : set the coverage target for individual files. exit with failure if the target isn't met
+* `--output-file output.json` : Save the merged coverage to this file
+
+See `run_tests.sh` for an example.
 
 ### API
 
@@ -51,15 +73,26 @@ See this project's `tests/pre_run_hook.gd`, `tests/post_run_hook.gd` and `.gutco
 * `func coverage_line_count() -> int`: Return the total number of lines which have been instrumented for the all script.
 * `func coverage_percent() -> int`: Return the aggregate coverage percent (out of 100%) for all scripts.
 * `func script_coverage(verbosity := Coverage.Verbosity.None) -> String`: Return a string which describes the script coverage. Check Coverage.Verbosity for possible values
+* `func save_coverage_file(filename: String) -> bool`: Save the coverage to a json file for use with `merge_coverage_file` or `merge_coverage.gd`
+* `func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool`: Merge a coverage file into the current coverage. If you don't wish to instrument the files set auto_instrument to false.
 
-#### `ScriptCoverageCollector` class:
+#### `ScriptCoverage` class:
 
-An internal class which instruments a single GDScript and collects line coverage for that script.
+An internal class which represents coverage for a specific script, but does not attempt to instrument the script.
 
 * `func coverage_count() -> int`: Return the number of lines which have been covered for the script.
 * `func coverage_line_count() -> int`: Return the total number of lines which have been instrumented for the script.
 * `func coverage_percent() -> int`: Return the coverage percent (out of 100%) for the script.
 * `func script_coverage(verbosity := Coverage.Verbosity.None, target_coverage: float) -> String`: Return a string which describes coverage for the script.
+* `func get_coverage_json() -> Dictionary`: Return the coverage as a dictionary suitable for saving to a json file.
+* `func merge_coverage_json(coverage_json: Dictionary)`: Combine `coverage_json` with the currently captured coverage for the script.
+* `func add_line_coverage(line_number: int, count := 1)`: Add coverage for a specific line for the script.
+#### `ScriptCoverageCollector` class:
+
+* Extends `ScriptCoverage`
+
+An internal class which instruments a single GDScript and collects line coverage for that script.
+
 
 #### API Examples
 
@@ -95,6 +128,9 @@ const FILE_TARGET := 33.0
 
 func run():
 	var coverage = Coverage.instance()
+	var coverage_file := OS.get_environment("COVERAGE_FILE") if OS.has_environment("COVERAGE_FILE") else ""
+	if coverage_file:
+		coverage.save_coverage_file(coverage_file)
 	coverage.set_coverage_targets(COVERAGE_TARGET, FILE_TARGET)
 	var verbosity = Coverage.Verbosity.FailingFiles
 	coverage.finalize(verbosity)
@@ -117,13 +153,16 @@ const Coverage = preload("./Coverage.gd")
 const packed_scene = preload("res://Spatial.tscn")
 
 func _initialize():
-    # pass in the scene tree
-    Coverage.new(self)
-    Coverage.instance().instrument_scene_scripts(packed_scene)
-    add_child(packed_scene.instance())
+	# pass in the scene tree
+	Coverage.new(self)
+	Coverage.instance().instrument_scene_scripts(packed_scene)
+	add_child(packed_scene.instance())
 
 func _finalize():
-    Coverage.finalize(Coverage.Verbosity.AllFiles)
+	var coverage_file := OS.get_environment("COVERAGE_FILE") if OS.has_environment("COVERAGE_FILE") else ""
+	if coverage_file:
+		coverage.save_coverage_file(coverage_file)
+	Coverage.finalize(Coverage.Verbosity.AllFiles)
 
 ```
 
