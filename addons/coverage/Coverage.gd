@@ -398,12 +398,12 @@ func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool
 	var f := File.new()
 	var err := f.open(filename, File.READ)
 	if err != OK:
-		printerr("Error %s opening %s for reading", [err, filename])
+		printerr("Error %s opening %s for reading" % [err, filename])
 		return false
 	var parsed = JSON.parse(f.get_as_text());
 	f.close()
 	if parsed.error != OK:
-		printerr("Error %s on line %s parsing %s", [parsed.error, parsed.error_line, filename])
+		printerr("Error %s on line %s parsing %s" % [parsed.error, parsed.error_line, filename])
 		printerr(parsed.error_string)
 		return false
 	if !parsed.result is Dictionary:
