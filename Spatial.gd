@@ -64,9 +64,10 @@ func _on_Timer_timeout():
 	$Label.text = Autoload2.fmt("done")
 	custom_label.custom_text = $Label.text
 	yield(get_tree().create_timer(.5), "timeout")
+	print("Performance takes %sus" % [Other.new().performance_test()])
 	emit_signal("done")
 	if auto_quit:
-		print('this is not covered in the unit tests')
+		print('This line is not covered in the unit tests')
 		get_tree().quit()
 	else:
-		print('this is not covered in the CoverageTree tests')
+		print('This line is not covered in the CoverageTree tests')

@@ -177,3 +177,9 @@ Godot will crash without warning if an currently running script is reloaded!
 ### My code isn't getting coverage
 
 Some situations can't get coverage. For example any **autoload** nodes will not get coverage in their _ready() functions.
+
+### Performance Issues
+
+There is a performance test in the test that compares the instrumented code to the uninstrumented code. It is a microbenchmark so should be taken with a grain of salt, but when running operations like `array[i] /= 2` the instrumented code is roughly 1.7x slower than uninstrumented code. array.append(line_number) is the fastest way I've found to record that a line has been covered, deferring more expensive operations.
+
+If you have trouble with instrumenting performance tests you should exclude that code from coverage if you can't figure out a way to make it faster than I have.

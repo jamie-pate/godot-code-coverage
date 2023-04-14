@@ -14,10 +14,15 @@ enum Verbosity {
 	AllFiles = 5
 }
 
+const MAX_QUEUE_SIZE := 10000
+
 class ScriptCoverage:
 	extends Reference
 
 	var coverage_lines := {}
+	# coverage_queue.append() is so far the fastest way to instrument code
+	# coverage_queue.append(line_number) seems faster than coverage_lines[i] += 1
+	var coverage_queue := []
 	var script_path := ""
 	var source_code := ""
 
@@ -30,16 +35,23 @@ class ScriptCoverage:
 		f.close()
 
 	func coverage_count() -> int:
-		var count = 0
+		process_queue()
+		var count := 0
 		for line in coverage_lines:
-			if coverage_lines[line] > 0:
+			if line > 0:
 				count += 1
 		return count
 
 	func coverage_line_count() -> int:
-		return len(coverage_lines)
+		process_queue()
+		var count := 0
+		for line in coverage_lines:
+			if line > -1:
+				count += 1
+		return count
 
 	func coverage_percent() -> float:
+		process_queue()
 		var clc = coverage_line_count()
 		return (float(coverage_count()) / float(clc)) * 100.0 if clc > 0 else 100.0
 
@@ -49,6 +61,7 @@ class ScriptCoverage:
 		coverage_lines[line_number] = coverage_lines[line_number] + count
 
 	func get_coverage_json() -> Dictionary:
+		process_queue()
 		return coverage_lines.duplicate()
 
 	func merge_coverage_json(coverage_json: Dictionary) -> void:
@@ -78,6 +91,16 @@ class ScriptCoverage:
 	# Call this function to revert the script object to it's original state.
 	func revert():
 		pass
+
+	# only process the queue if it got too big
+	func maybe_process_queue():
+		if len(coverage_queue) > MAX_QUEUE_SIZE:
+			process_queue()
+
+	func process_queue():
+		for line in coverage_queue:
+			add_line_coverage(line)
+		coverage_queue = []
 
 class ScriptCoverageCollector:
 	extends ScriptCoverage
@@ -176,9 +199,11 @@ class ScriptCoverageCollector:
 			]
 
 	func _interpolate_coverage(coverage_script_path: String, script: GDScript, id: int) -> String:
+		var collector_var := "__cl__"
 		var lines = script.source_code.split("\n")
 		var indent_stack := []
 		var ld_stack := []
+		var write_var := false
 		var state:int = Indent.State.None
 		var next_state: int = Indent.State.None
 		var subclass_name: String
@@ -238,10 +263,12 @@ class ScriptCoverageCollector:
 			match first_token:
 				"func":
 					next_state = Indent.State.Func
+					write_var = true
 				"class":
 					next_state = Indent.State.Class
 					next_subclass_name = _get_token(stripped_line, 1).trim_suffix(":")
 				"static":
+					write_var = true
 					next_state = Indent.State.StaticFunc
 				"else:", "elif":
 					skip = true
@@ -252,10 +279,17 @@ class ScriptCoverageCollector:
 			elif state == Indent.State.MatchPattern:
 				next_state = Indent.State.Func
 			if !skip && state in [Indent.State.Func, Indent.State.StaticFunc]:
+				if write_var:
+					write_var = false
+					out_lines.append("%svar %s = %s.coverage_queue" % [
+						leading_whitespace,
+						collector_var,
+						_get_coverage_collector_expr(coverage_script_path, script.resource_path)
+					])
 				coverage_lines[i] = 0
-				out_lines.append("%s%s.add_line_coverage(%s)" % [
+				out_lines.append("%s%s.append(%s)" % [
 					leading_whitespace,
-					_get_coverage_collector_expr(coverage_script_path, script.resource_path),
+					collector_var,
 					i
 				])
 			out_lines.append(line)
@@ -302,7 +336,10 @@ func _finalize(print_verbosity := 0):
 	print(script_coverage(print_verbosity))
 
 func get_coverage_collector(script_name: String):
-	return coverage_collectors[script_name] if script_name in coverage_collectors else null
+	var result = coverage_collectors[script_name] if script_name in coverage_collectors else null
+	if result:
+		result.maybe_process_queue()
+	return result
 
 func coverage_count() -> int:
 	var result := 0

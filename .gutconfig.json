@@ -17,7 +17,7 @@
     "prefix": "test_",
     "selected": "",
     "should_exit": true,
-    "should_exit_on_success": false,
+    "should_exit_on_success": true,
     "should_maximize": true,
     "compact_mode": false,
     "suffix": ".gd",
