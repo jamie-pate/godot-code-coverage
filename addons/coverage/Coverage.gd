@@ -38,17 +38,13 @@ class ScriptCoverage:
 		process_queue()
 		var count := 0
 		for line in coverage_lines:
-			if line > 0:
+			if coverage_lines[line] > 0:
 				count += 1
 		return count
 
 	func coverage_line_count() -> int:
 		process_queue()
-		var count := 0
-		for line in coverage_lines:
-			if line > -1:
-				count += 1
-		return count
+		return len(coverage_lines)
 
 	func coverage_percent() -> float:
 		process_queue()
