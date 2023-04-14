@@ -74,6 +74,11 @@ class ScriptCoverage:
 				i += 1
 		return result.join("\n")
 
+	# virtual
+	# Call this function to revert the script object to it's original state.
+	func revert():
+		pass
+
 class ScriptCoverageCollector:
 	extends ScriptCoverage
 
@@ -105,7 +110,12 @@ class ScriptCoverageCollector:
 		source_code = covered_script.source_code
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script)
-		covered_script.source_code = _interpolate_coverage(coverage_script_path, covered_script, id)
+		_set_script_code(_interpolate_coverage(coverage_script_path, covered_script, id))
+		if DEBUG_SCRIPT_COVERAGE:
+			print("new script resource_path %s" % [covered_script.resource_path])
+
+	func _set_script_code(new_source_code) -> void:
+		covered_script.source_code = new_source_code
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script.source_code)
 		# if we pass 'keep_state = true' to reload() then we can reload the script
@@ -119,8 +129,9 @@ class ScriptCoverageCollector:
 			ERR_MAP[err] if err in ERR_MAP else err,
 			_add_line_numbers(covered_script.source_code)
 		])
-		if DEBUG_SCRIPT_COVERAGE:
-			print("new script resource_path %s" % [covered_script.resource_path])
+
+	func revert():
+		_set_script_code(source_code)
 
 	func _add_line_numbers(source_code: String) -> String:
 		var result := PoolStringArray()
@@ -284,6 +295,8 @@ func enforce_node_coverage():
 	return self
 
 func _finalize(print_verbosity := 0):
+	for script_path in coverage_collectors:
+		coverage_collectors[script_path].revert()
 	if _enforce_node_coverage:
 		_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
 	print(script_coverage(print_verbosity))

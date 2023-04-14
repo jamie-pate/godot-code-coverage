@@ -1,6 +1,7 @@
 extends "res://addons/gut/hook_script.gd"
 
 const Coverage = preload("res://addons/coverage/Coverage.gd")
+const Other = preload("../Other.gd")
 
 const COVERAGE_TARGET := 74.0
 const FILE_TARGET := 33.0
@@ -12,8 +13,11 @@ func run():
 		coverage.save_coverage_file(coverage_file)
 	coverage.set_coverage_targets(COVERAGE_TARGET, FILE_TARGET)
 	var verbosity = Coverage.Verbosity.FailingFiles
-	coverage.finalize(verbosity)
 	var logger = gut.get_logger()
+	assert(Other.source_code.match("*Coverage.gd*"), "Other script should be instrumented")
+	coverage.finalize(verbosity)
+	assert(!Other.source_code.match("*Coverage.gd*"), "Other script should no longer be instrumented")
+
 	var coverage_passing = coverage.coverage_passing()
 
 	if !coverage_passing:
