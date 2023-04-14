@@ -111,6 +111,7 @@ class ScriptCoverageCollector:
 		43: "PARSE_ERROR"
 	}
 
+	var instrumented_source_code := ""
 	var covered_script: Script
 
 	class Indent:
@@ -133,11 +134,12 @@ class ScriptCoverageCollector:
 		source_code = covered_script.source_code
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script)
-		_set_script_code(_interpolate_coverage(coverage_script_path, covered_script, id))
-		if DEBUG_SCRIPT_COVERAGE:
-			print("new script resource_path %s" % [covered_script.resource_path])
+		instrumented_source_code = _interpolate_coverage(coverage_script_path, covered_script, id)
+		set_instrumented()
 
 	func _set_script_code(new_source_code) -> void:
+		if covered_script.source_code == new_source_code:
+			return
 		covered_script.source_code = new_source_code
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script.source_code)
@@ -153,8 +155,11 @@ class ScriptCoverageCollector:
 			_add_line_numbers(covered_script.source_code)
 		])
 
+	func set_instrumented(value := true):
+		_set_script_code(instrumented_source_code if value else source_code)
+
 	func revert():
-		_set_script_code(source_code)
+		set_instrumented(false)
 
 	func _add_line_numbers(source_code: String) -> String:
 		var result := PoolStringArray()

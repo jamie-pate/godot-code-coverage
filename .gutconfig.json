@@ -24,5 +24,6 @@
     "tests": [],
     "dirs": ["res://tests"],
     "unit_test_name": "",
-    "gut_on_top": true
+    "gut_on_top": true,
+    "log_level":3
   }
