@@ -56,7 +56,7 @@ See `run_tests.sh` for an example.
 * `Coverage.new(scene_tree: SceneTree, exclude_paths := [])`
     * Initialize the coverage singleton. Until `Coverage.instance().finalize()` has been called you may access the singleton with `Coverage.instance()`
     * `exclude_paths` is a list of resource paths to be skipped when instrumenting files. It follows the [`String.match`](https://docs.godotengine.org/en/stable/classes/class_string.html#class-string-method-match) syntax from GDScript.
-* `static func instance() -> Coverage`: Returns the current singleton instance. Must be created first with `Coverage.new(...)`
+* `static func instance(strict := true) -> Coverage`: Returns the current singleton instance. Must be created first with `Coverage.new(...)`. May be called before calling `Coverage.new()` if strict is `false`, in which case it returns `null` if there is no instance.
 * `static func finalize(print_verbose = false)`: Remove the singleton instance and print out the final coverage results. Pass `true` to print a verbose accounting of coverage for all files.
 * `func instrument_scripts(path: String)`: **Recommended Approach** Recursively instrument all `*.gd` files within the requested path. Respects the `exclude_paths` argument passed to the constructor.
     * Returns `self` for chaining

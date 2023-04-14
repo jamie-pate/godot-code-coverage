@@ -564,9 +564,9 @@ func _list_scripts_recursive(path: String, list := []) -> Array:
 	d.list_dir_end()
 	return list
 
-static func instance():
+static func instance(strict := true):
 	# unable to reference the Coverage script from a static so you need to call Coverage.new(...) first
-	assert(STATIC_VARS.instance, "No instance has been created, use Coverage.new(get_tree()) first.")
+	assert(!strict || STATIC_VARS.instance, "No instance has been created, use Coverage.new(get_tree()) first.")
 	return STATIC_VARS.instance
 
 static func finalize(print_verbosity := 0) -> void:
