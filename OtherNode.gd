@@ -1,10 +1,13 @@
 extends Node
 
-# I don't think we can fix the case where the _init() has any required arguments
-# your code will have to allow these to be (re)initialized with no arguments
-func _init(parent: Node = null):
+var ready := false
+
+func _init(parent: Node):
 	if parent:
 		parent.add_child(self)
+
+func _ready():
+	ready = true
 
 func fmt(value: String):
 	return "OtherNode(%s)" % [value]

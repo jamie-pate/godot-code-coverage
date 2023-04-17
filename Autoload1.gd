@@ -15,6 +15,7 @@ func _init():
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	_ready = '1'
+	add_child(other_node)
 
 func fmt(value: String) -> String:
 	emit_signal('formatting')

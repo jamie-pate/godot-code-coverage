@@ -364,9 +364,10 @@ func set_coverage_targets(total: float, file: float) -> void:
 
 func coverage_passing() -> bool:
 	var all_files_passing := true
-	for script in coverage_collectors:
-		var script_percent = coverage_collectors[script].coverage_percent()
-		all_files_passing = all_files_passing && script_percent > _coverage_target_file
+	if _coverage_target_file < INF:
+		for script in coverage_collectors:
+			var script_percent = coverage_collectors[script].coverage_percent()
+			all_files_passing = all_files_passing && script_percent > _coverage_target_file
 	return coverage_percent() > _coverage_target_total && all_files_passing
 
 # see ScriptCoverage.Verbosity for verbosity levels
