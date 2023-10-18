@@ -8,9 +8,7 @@ var auto_quit := true
 
 signal done()
 
-
 class Inner:
-	tool
 	extends RefCounted
 
 	class InnerEmpty:
@@ -39,7 +37,7 @@ func _on_Timer_timeout():
 	custom_label.custom_text = \
 		$Label.text
 	for i in range(2):
-		await get_tree().idle_frame
+		await get_tree().process_frame
 		if i == 0:
 			$Label.text = other.fmt(str(i))
 		elif i == 1:
@@ -59,7 +57,7 @@ func _on_Timer_timeout():
 				$Label.text = other.fmt(str(i * 1))
 			3: $Label.text = other.fmt(str(i * 1))
 		custom_label.custom_text = $Label.text
-	await get_tree().idle_frame
+	await get_tree().process_frame
 	assert(Autoload2._counter == '3', "Autoload2 counter should be 3 because Autoload1 'formatting' signal fired")
 	$Label.text = Autoload2.fmt("done")
 	custom_label.custom_text = $Label.text

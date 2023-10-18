@@ -1,4 +1,4 @@
-extends MainLoop
+extends SceneTree
 
 const Coverage = preload("./Coverage.gd")
 
@@ -61,12 +61,3 @@ func _initialize():
 		quit(1)
 	else:
 		quit()
-
-func quit(exit_code := 0):
-	_quit = true
-	_exit_code = exit_code
-
-func _idle(delta):
-	if _quit:
-		OS.set_exit_code(_exit_code)
-	return _quit

@@ -1,4 +1,4 @@
-extends "res://addons/gut/hook_script.gd"
+extends GutHookScript
 
 const Coverage = preload("res://addons/coverage/Coverage.gd")
 const exclude_paths = [
@@ -9,5 +9,5 @@ const exclude_paths = [
 
 func run():
 	Coverage.new(gut.get_tree(), exclude_paths) \
-		super.instrument_scripts("res://") \
-		super.enforce_node_coverage()
+		.instrument_scripts("res://") \
+		.enforce_node_coverage()

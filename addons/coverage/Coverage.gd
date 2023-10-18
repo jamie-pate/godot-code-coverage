@@ -28,8 +28,8 @@ class ScriptCoverage:
 
 	func _init(_script_path: String, load_source_code := true) -> void:
 		script_path = _script_path
-		var f := File.new()
-		var err := f.open(_script_path, File.READ)
+		var f := FileAccess.open(_script_path, FileAccess.READ)
+		var err := f.get_open_error()
 		assert(err == OK, "Unable to open %s for reading" % [_script_path])
 		source_code = f.get_as_text()
 		f.close()
@@ -101,12 +101,16 @@ class ScriptCoverage:
 class ScriptCoverageCollector:
 	extends ScriptCoverage
 
-	const DEBUG_SCRIPT_COVERAGE := false
-	const STATIC_VARS := {last_script_id = 0}
+	# 1: print script names
+	# 2: also print instrumented script code
+	# 3: also print original script code
+	const DEBUG_SCRIPT_COVERAGE := 2
+	const DEBUG_SCRIPT_COVERAGE_DEPTH := false
 	const ERR_MAP := {
 		43: "PARSE_ERROR"
 	}
 
+	static var _last_script_id = 0
 	var instrumented_source_code := ""
 	var covered_script: Script
 
@@ -125,21 +129,23 @@ class ScriptCoverageCollector:
 
 	func _init(coverage_script_path: String, _script_path: String) -> void:
 		super(_script_path, false)
-		var id = STATIC_VARS.last_script_id + 1
-		STATIC_VARS.last_script_id = id
+		var id = _last_script_id + 1
+		_last_script_id = id
 		covered_script = load(_script_path)
 		source_code = covered_script.source_code
 		if DEBUG_SCRIPT_COVERAGE:
-			print(covered_script)
+			print(_script_path)
+			if DEBUG_SCRIPT_COVERAGE > 2:
+				_print_with_line_numbers(source_code)
 		instrumented_source_code = _interpolate_coverage(coverage_script_path, covered_script, id)
+		if DEBUG_SCRIPT_COVERAGE > 1:
+			_print_with_line_numbers(instrumented_source_code)
 		set_instrumented()
 
 	func _set_script_code(new_source_code) -> void:
 		if covered_script.source_code == new_source_code:
 			return
 		covered_script.source_code = new_source_code
-		if DEBUG_SCRIPT_COVERAGE:
-			print(covered_script.source_code)
 		# if we pass 'keep_state = true' to reload() then we can reload the script
 		# without removing it from all the nodes.
 		# this requires us to add a function call for each line that checks to make
@@ -151,6 +157,9 @@ class ScriptCoverageCollector:
 			ERR_MAP[err] if err in ERR_MAP else err,
 			_add_line_numbers(covered_script.source_code)
 		])
+
+	func _print_with_line_numbers(source_code: String):
+		print(_add_line_numbers(source_code))
 
 	func set_instrumented(value := true):
 		_set_script_code(instrumented_source_code if value else source_code)
@@ -195,7 +204,7 @@ class ScriptCoverageCollector:
 		return "".join(leading_whitespace)
 
 	func _get_coverage_collector_expr(coverage_script_path: String, script_resource_path: String) -> String:
-		return "load(\"%s\").instantiate().get_coverage_collector(\"%s\")" % [
+		return "load(\"%s\").get_instance().get_coverage_collector(\"%s\")" % [
 				coverage_script_path,
 				script_resource_path
 			]
@@ -245,14 +254,14 @@ class ScriptCoverageCollector:
 			var line_depth = len(leading_whitespace)
 			while line_depth < depth:
 				var indent = indent_stack.pop_back()
-				if DEBUG_SCRIPT_COVERAGE:
+				if DEBUG_SCRIPT_COVERAGE_DEPTH:
 					print("\t\t\t\tPOP_LINE_DEPTH %s > %s (%s) %s  (was %s) %s" % [depth, indent.depth, state, indent.subclass_name, subclass_name, subclass_name && subclass_name != indent.subclass_name])
 				depth = indent.depth
 				state = indent.state
 				next_state = indent.state
 				subclass_name = indent.subclass_name
 			if line_depth > depth:
-				if DEBUG_SCRIPT_COVERAGE:
+				if DEBUG_SCRIPT_COVERAGE_DEPTH:
 					print("\t\t\t\tPUSH_LINE_DEPTH %s > %s (%s > %s) %s" % [depth, line_depth, state, next_state, subclass_name])
 				indent_stack.append(Indent.new(depth, state, subclass_name))
 				if next_subclass_name:
@@ -307,7 +316,7 @@ class NullCoverage:
 	func add_line_coverage(_line: int):
 		pass
 
-const STATIC_VARS := {instance=null}
+static var _instance = null
 var coverage_collectors := {}
 var _scene_tree: MainLoop
 var _exclude_paths := []
@@ -318,8 +327,8 @@ var _coverage_target_total := INF
 
 func _init(scene_tree: MainLoop, exclude_paths := []):
 	_exclude_paths += exclude_paths
-	assert(!STATIC_VARS.instance, "Only one instance of this class is allowed")
-	STATIC_VARS.instance = self
+	assert(!_instance, "Only one instance of this class is allowed")
+	_instance = self
 	_scene_tree = scene_tree
 
 func enforce_node_coverage():
@@ -397,8 +406,8 @@ func script_coverage(verbosity := 0):
 	return "\n\n" if multiline else "\n".join(result)
 
 func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool:
-	var f := File.new()
-	var err := f.open(filename, File.READ)
+	var f := FileAccess.open(filename, FileAccess.READ)
+	var err := f.get_open_error()
 	if err != OK:
 		printerr("Error %s opening %s for reading" % [err, filename])
 		return false
@@ -430,8 +439,8 @@ func save_coverage_file(filename: String) -> bool:
 	var coverage := {}
 	for script_path in coverage_collectors:
 		coverage[script_path] = coverage_collectors[script_path].get_coverage_json()
-	var f := File.new()
-	var err := f.open(filename, File.WRITE)
+	var f := FileAccess.open(filename, FileAccess.WRITE)
+	var err := f.get_open_error()
 	if err != OK:
 		printerr("Error %s opening %s for writing" % [err, filename])
 		return false
@@ -469,6 +478,7 @@ func _instrument_script(script: GDScript) -> void:
 
 	if !_excluded(script_path) && script_path && !script_path in coverage_collectors:
 		coverage_collectors[script_path] = ScriptCoverageCollector.new(coverage_script_path ,script_path)
+		# BROKEN! https://github.com/godotengine/godot/issues/83590
 		var deps = ResourceLoader.get_dependencies(script_path)
 		for dep in deps:
 			if dep.get_extension() == "gd":
@@ -480,6 +490,7 @@ func instrument_scene_scripts(scene: PackedScene):
 		var node_instance = s.get_node_instance(i)
 		if node_instance:
 			# load this packed scene and replace all scripts etc
+			print('instrument_script %s ' % [node_instance])
 			instrument_scene_scripts(node_instance)
 		for npi in range(s.get_node_property_count(i)):
 			var p = s.get_node_property_name(i, npi)
@@ -524,7 +535,7 @@ func _collect_autoloads():
 		var autoload_setting = ProjectSettings.get_setting(setting_name) if ProjectSettings.has_setting(setting_name) else ""
 		if autoload_setting:
 			_collect_script_objects(n, autoloaded, obj_set)
-	autoloaded.invert()
+	autoloaded.reverse()
 	var deps := []
 	for item in autoloaded:
 		for d in ResourceLoader.get_dependencies(item.script.resource_path):
@@ -535,7 +546,7 @@ func _collect_autoloads():
 
 func instrument_autoloads(script_list: Array = []):
 	var autoload_scripts = _collect_autoloads()
-	autoload_scripts.invert()
+	autoload_scripts.reverse()
 	for item in autoload_scripts:
 		_instrument_script(item.script)
 	return self
@@ -547,14 +558,14 @@ func instrument_scripts(path: String):
 	return self
 
 func _list_scripts_recursive(path: String, list := []) -> Array:
-	var d := DirAccess.new()
-	var err := d.open(path)
+	var d := DirAccess.open(path)
+	var err := d.get_open_error()
 	assert(err == OK, "Error opening path %s: %s" % [path, err])
 	err = d.list_dir_begin() # TODOConverter3To4 fill missing arguments https://github.com/godotengine/godot/pull/40547
 	assert(err == OK, "Error listing directory %s: %s" % [path, err])
 	var next := d.get_next()
 	while next:
-		var next_path = path.plus_file(next)
+		var next_path = path.path_join(next)
 		if next.get_extension() == "gd":
 			if !_excluded(next_path):
 				list.append(next_path)
@@ -564,11 +575,11 @@ func _list_scripts_recursive(path: String, list := []) -> Array:
 	d.list_dir_end()
 	return list
 
-static func instance(strict := true):
+static func get_instance(strict := true):
 	# unable to reference the Coverage script from a static so you need to call Coverage.new(...) first
-	assert(!strict || STATIC_VARS.instance, "No instance has been created, use Coverage.new(get_tree()) first.")
-	return STATIC_VARS.instance
+	assert(!strict || _instance, "No instance has been created, use Coverage.new(get_tree()) first.")
+	return _instance
 
 static func finalize(print_verbosity := 0) -> void:
-	STATIC_VARS.instance._finalize(print_verbosity)
-	STATIC_VARS.instance = NullCoverage.new()
+	_instance._finalize(print_verbosity)
+	_instance = NullCoverage.new()

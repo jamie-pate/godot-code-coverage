@@ -1,14 +1,17 @@
 {
  "background_color": "ff262626",
+ "compact_mode": false,
  "config_file": "res://.gutconfig.json",
  "dirs": [
   "res://tests"
  ],
  "disable_colors": false,
- "double_strategy": "partial",
+ "double_strategy": 1,
+ "errors_do_not_cause_failure": false,
  "font_color": "ffcccccc",
  "font_name": "CourierPrime",
  "font_size": 16,
+ "gut_on_top": true,
  "hide_orphans": false,
  "ignore_pause": false,
  "include_subdirs": false,
@@ -17,27 +20,26 @@
  "junit_xml_timestamp": false,
  "log_level": 1,
  "opacity": 100,
- "post_run_script": "",
- "pre_run_script": "",
+ "paint_after": 0.1,
+ "panel_options": {
+  "font_name": "CourierPrime",
+  "font_size": 12,
+  "hide_output_text": false,
+  "hide_result_tree": false,
+  "hide_settings": false,
+  "output_font_name": "CourierPrime",
+  "output_font_size": 30,
+  "use_colors": false
+ },
+ "post_run_script": "res://tests/post_run_hook.gd",
+ "pre_run_script": "res://tests/pre_run_hook.gd",
  "prefix": "test_",
  "selected": "test_coverage.gd",
  "should_exit": false,
  "should_exit_on_success": false,
  "should_maximize": false,
- "compact_mode": false,
  "show_help": false,
  "suffix": ".gd",
- "tests": [
-
- ],
- "unit_test_name": "test_autoload_coverage",
- "gut_on_top": true,
- "panel_options": {
-  "font_name": "CourierPrime",
-  "font_size": 30,
-  "hide_result_tree": false,
-  "hide_output_text": false,
-  "hide_settings": false,
-  "use_colors": false
- }
+ "tests": [],
+ "unit_test_name": "test_autoload_coverage"
 }
