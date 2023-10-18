@@ -1,4 +1,4 @@
-extends Reference
+extends RefCounted
 
 # verbosity levels:
 # None: not verbose
@@ -17,7 +17,7 @@ enum Verbosity {
 const MAX_QUEUE_SIZE := 10000
 
 class ScriptCoverage:
-	extends Reference
+	extends RefCounted
 
 	var coverage_lines := {}
 	# coverage_queue.append() is so far the fastest way to instrument code
@@ -65,7 +65,7 @@ class ScriptCoverage:
 			add_line_coverage(int(line_number), coverage_json[line_number])
 
 	func script_coverage(verbosity := Verbosity.None, target: float = INF):
-		var result := PoolStringArray()
+		var result := PackedStringArray()
 		var i = 0
 		var coverage_percent := coverage_percent()
 		var partial_show: bool = verbosity == Verbosity.PartialFiles && coverage_percent < 100 && coverage_percent > 0
@@ -81,7 +81,7 @@ class ScriptCoverage:
 					i, "%4dx" % [coverage_lines[i]] if i in coverage_lines else "     ", line
 				])
 				i += 1
-		return result.join("\n")
+		return "\n".join(result)
 
 	# virtual
 	# Call this function to revert the script object to it's original state.
@@ -111,7 +111,7 @@ class ScriptCoverageCollector:
 	var covered_script: Script
 
 	class Indent:
-		extends Reference
+		extends RefCounted
 		enum State {None, Class, Func, StaticFunc, Match, MatchPattern}
 
 		var depth: int
@@ -123,7 +123,8 @@ class ScriptCoverageCollector:
 			state = _state
 			subclass_name = _subclass_name
 
-	func _init(coverage_script_path: String, _script_path: String).(_script_path, false) -> void:
+	func _init(coverage_script_path: String, _script_path: String) -> void:
+		super(_script_path, false)
 		var id = STATIC_VARS.last_script_id + 1
 		STATIC_VARS.last_script_id = id
 		covered_script = load(_script_path)
@@ -158,12 +159,12 @@ class ScriptCoverageCollector:
 		set_instrumented(false)
 
 	func _add_line_numbers(source_code: String) -> String:
-		var result := PoolStringArray()
+		var result := PackedStringArray()
 		var i := 0
 		for line in source_code.split("\n"):
 			result.append("%4d: %s" % [i, line])
 			i += 1
-		return result.join("\n")
+		return "\n".join(result)
 
 	func _to_string():
 		return script_coverage(2)
@@ -185,16 +186,16 @@ class ScriptCoverageCollector:
 		return result
 
 	func _get_leading_whitespace(line: String) -> String:
-		var leading_whitespace := PoolStringArray()
+		var leading_whitespace := PackedStringArray()
 		for chr in range(len(line)):
 			if line[chr] in [" ", "\t"]:
 				leading_whitespace.append(line[chr])
 			else:
 				break
-		return leading_whitespace.join("")
+		return "".join(leading_whitespace)
 
 	func _get_coverage_collector_expr(coverage_script_path: String, script_resource_path: String) -> String:
-		return "load(\"%s\").instance().get_coverage_collector(\"%s\")" % [
+		return "load(\"%s\").instantiate().get_coverage_collector(\"%s\")" % [
 				coverage_script_path,
 				script_resource_path
 			]
@@ -210,7 +211,7 @@ class ScriptCoverageCollector:
 		var subclass_name: String
 		var next_subclass_name: String
 		var depth := 0
-		var out_lines := PoolStringArray()
+		var out_lines := PackedStringArray()
 		# 0 based, start with -1 so that the first increment will give 0
 		var i := -1
 		var block := {
@@ -294,12 +295,12 @@ class ScriptCoverageCollector:
 					i
 				])
 			out_lines.append(line)
-		return out_lines.join("\n")
+		return "\n".join(out_lines)
 
 # this is a placeholder class for when we've finalized and don't want coverage anymore
 # some scripts will continue to be instrumented so we must have something to accept all these calls
 class NullCoverage:
-	extends Reference
+	extends RefCounted
 	func get_coverage_collector(_script_name: String):
 		return self
 
@@ -322,7 +323,7 @@ func _init(scene_tree: MainLoop, exclude_paths := []):
 	_scene_tree = scene_tree
 
 func enforce_node_coverage():
-	var err := _scene_tree.connect("tree_changed", self, "_on_tree_changed")
+	var err := _scene_tree.connect("tree_changed", Callable(self, "_on_tree_changed"))
 	assert(err == OK)
 	_enforce_node_coverage = true
 	# this may error on autoload if you don"t call `instrument_autoloads()` immediately
@@ -333,7 +334,7 @@ func _finalize(print_verbosity := 0):
 	for script_path in coverage_collectors:
 		coverage_collectors[script_path].revert()
 	if _enforce_node_coverage:
-		_scene_tree.disconnect("tree_changed", self, "_on_tree_changed")
+		_scene_tree.disconnect("tree_changed", Callable(self, "_on_tree_changed"))
 	print(script_coverage(print_verbosity))
 
 func get_coverage_collector(script_name: String):
@@ -372,7 +373,7 @@ func coverage_passing() -> bool:
 
 # see ScriptCoverage.Verbosity for verbosity levels
 func script_coverage(verbosity := 0):
-	var result = PoolStringArray()
+	var result = PackedStringArray()
 	var coverage_count := 0
 	var coverage_lines := 0
 	var coverage_percent := coverage_percent()
@@ -393,7 +394,7 @@ func script_coverage(verbosity := 0):
 		coverage_line_count()
 	])
 
-	return result.join("\n\n" if multiline else "\n")
+	return "\n\n" if multiline else "\n".join(result)
 
 func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool:
 	var f := File.new()
@@ -401,7 +402,9 @@ func merge_from_coverage_file(filename: String, auto_instrument := true) -> bool
 	if err != OK:
 		printerr("Error %s opening %s for reading" % [err, filename])
 		return false
-	var parsed = JSON.parse(f.get_as_text());
+	var test_json_conv = JSON.new()
+	test_json_conv.parse(f.get_as_text());
+	var parsed = test_json_conv.get_data()
 	f.close()
 	if parsed.error != OK:
 		printerr("Error %s on line %s parsing %s" % [parsed.error, parsed.error_line, filename])
@@ -432,7 +435,7 @@ func save_coverage_file(filename: String) -> bool:
 	if err != OK:
 		printerr("Error %s opening %s for writing" % [err, filename])
 		return false
-	f.store_string(JSON.print(coverage))
+	f.store_string(JSON.stringify(coverage))
 	f.close()
 	return true
 
@@ -544,10 +547,10 @@ func instrument_scripts(path: String):
 	return self
 
 func _list_scripts_recursive(path: String, list := []) -> Array:
-	var d := Directory.new()
+	var d := DirAccess.new()
 	var err := d.open(path)
 	assert(err == OK, "Error opening path %s: %s" % [path, err])
-	err = d.list_dir_begin(true)
+	err = d.list_dir_begin() # TODOConverter3To4 fill missing arguments https://github.com/godotengine/godot/pull/40547
 	assert(err == OK, "Error listing directory %s: %s" % [path, err])
 	var next := d.get_next()
 	while next:

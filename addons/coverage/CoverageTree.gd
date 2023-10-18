@@ -12,12 +12,12 @@ func _initialize():
 
 func _run_scene(resource_path: String):
 	var packed_scene : PackedScene = load(resource_path)
-	Coverage.instance().instrument_scene_scripts(packed_scene)
-	var scene = packed_scene.instance()
+	Coverage.instantiate().instrument_scene_scripts(packed_scene)
+	var scene = packed_scene.instantiate()
 	root.add_child(scene)
 
 func _finalize():
-	var coverage = Coverage.instance()
+	var coverage = Coverage.instantiate()
 	var coverage_file := OS.get_environment("COVERAGE_FILE") if OS.has_environment("COVERAGE_FILE") else ""
 	if coverage_file:
 		coverage.save_coverage_file(coverage_file)

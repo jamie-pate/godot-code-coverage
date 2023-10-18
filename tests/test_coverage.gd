@@ -11,9 +11,9 @@ func test_autoload_coverage():
 	assert_true(Autoload1._initted)
 	assert_eq(Autoload1._ready, '1')
 	assert_eq(Autoload2._counter, '2')
-	var node = add_child_autoqfree(scene.instance())
+	var node = add_child_autoqfree(scene.instantiate())
 	node.auto_quit = false
-	yield(yield_to(node, "done", 5000), YIELD)
+	await yield_to(node, "done", 5000).YIELD
 	assert_signal_emitted(node, "done")
 	assert_true(Autoload1._initted)
 	assert_eq(Autoload1._ready, '1')
@@ -22,7 +22,7 @@ func test_autoload_coverage():
 	assert_eq(Autoload1.other._initted, 1)
 
 func test_performance():
-	var coverage: Coverage = Coverage.instance()
+	var coverage: Coverage = Coverage.instantiate()
 	var collector: Coverage.ScriptCoverageCollector = coverage.get_coverage_collector(Other.resource_path)
 	var logger = get_logger()
 	var other := Other.new()

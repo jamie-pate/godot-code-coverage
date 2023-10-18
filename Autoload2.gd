@@ -4,7 +4,7 @@ var _counter = '0'
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	_counter = '2'
-	var err := Autoload1.connect('formatting', self, '_on_autoload1_formatting')
+	var err := Autoload1.connect('formatting', Callable(self, '_on_autoload1_formatting'))
 	assert(err == OK)
 
 func fmt(value: String):

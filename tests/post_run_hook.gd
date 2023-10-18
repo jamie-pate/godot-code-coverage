@@ -6,7 +6,7 @@ const COVERAGE_TARGET := 74.0
 const FILE_TARGET := 33.0
 
 func run():
-	var coverage = Coverage.instance()
+	var coverage = Coverage.instantiate()
 	var coverage_file := OS.get_environment("COVERAGE_FILE") if OS.has_environment("COVERAGE_FILE") else ""
 	if coverage_file:
 		coverage.save_coverage_file(coverage_file)

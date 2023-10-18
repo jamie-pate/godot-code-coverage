@@ -1,4 +1,4 @@
-extends Reference
+extends RefCounted
 
 var _initted = 0
 var performance_result := []
@@ -15,7 +15,7 @@ func static_fmt(value:String):
 func performance_test() -> int:
 	var result := 0xFFFFFF
 	for j in range(10):
-		var start := OS.get_ticks_usec()
+		var start := Time.get_ticks_usec()
 		var n := []
 		var repeat = 10000
 		for i in range(repeat):
@@ -26,7 +26,7 @@ func performance_test() -> int:
 		# paranoia, the interpreter doesn't optimize yet
 		# but someday it might optimize the whole loop out if n is discarded
 		performance_result = n
-		var duration := OS.get_ticks_usec() - start
+		var duration := Time.get_ticks_usec() - start
 		if duration < result:
 			result = duration
 	return result
