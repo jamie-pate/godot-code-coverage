@@ -6,44 +6,23 @@
 ;   [section] ; section goes between []
 ;   param=value ; assign values to parameters
 
-config_version=4
-
-_global_script_classes=[ {
-"base": "Reference",
-"class": "GutHookScript",
-"language": "GDScript",
-"path": "res://addons/gut/hook_script.gd"
-}, {
-"base": "Node",
-"class": "GutTest",
-"language": "GDScript",
-"path": "res://addons/gut/test.gd"
-}, {
-"base": "Spatial",
-"class": "Spatial1",
-"language": "GDScript",
-"path": "res://Spatial.gd"
-} ]
-_global_script_class_icons={
-"GutHookScript": "",
-"GutTest": "",
-"Spatial1": ""
-}
+config_version=5
 
 [application]
 
 config/name="Godot-code-coverage"
-run/main_scene="res://Spatial.tscn"
+run/main_scene="res://spatial.tscn"
+config/features=PackedStringArray("4.2")
 config/icon="res://icon.png"
 
 [autoload]
 
-Autoload1="*res://Autoload1.gd"
-Autoload2="*res://Autoload2.gd"
+Autoload1="*res://autoload1.gd"
+Autoload2="*res://autoload2.gd"
 
 [editor_plugins]
 
-enabled=PoolStringArray( "res://addons/gut/plugin.cfg" )
+enabled=PackedStringArray("res://addons/gut/plugin.cfg")
 
 [gui]
 
@@ -55,4 +34,4 @@ common/enable_pause_aware_picking=true
 
 [rendering]
 
-environment/default_environment="res://default_env.tres"
+environment/defaults/default_environment="res://default_env.tres"
