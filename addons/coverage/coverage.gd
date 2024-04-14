@@ -148,7 +148,7 @@ class ScriptCoverageCollector:
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script)
 		instrumented_source_code = _interpolate_coverage(coverage_script_path, covered_script, id)
-		set_instrumented()
+		# caller must run set_instrumented() in case the script has a _static_init
 
 	func _set_script_code(new_source_code) -> void:
 		if covered_script.source_code == new_source_code:
@@ -169,7 +169,7 @@ class ScriptCoverageCollector:
 				% [
 					covered_script.resource_path,
 					ERR_MAP[err] if err in ERR_MAP else err,
-					_add_line_numbers(covered_script.source_code)
+					add_line_numbers(covered_script.source_code)
 				]
 			)
 		)
@@ -178,9 +178,11 @@ class ScriptCoverageCollector:
 		_set_script_code(instrumented_source_code if value else source_code)
 
 	func revert():
-		set_instrumented(false)
+		pass
+		# this can cause scripts to crash
+		# set_instrumented(false)
 
-	func _add_line_numbers(source_code: String) -> String:
+	static func add_line_numbers(source_code: String) -> String:
 		var result := PackedStringArray()
 		var i := 0
 		for line in source_code.split("\n"):
@@ -342,6 +344,8 @@ class ScriptCoverageCollector:
 class NullCoverage:
 	extends Coverage
 
+	var coverage_queue = []
+
 	func get_coverage_collector(_script_name: String):
 		return self
 
@@ -377,6 +381,10 @@ func get_coverage_collector(script_name: String):
 	var result = coverage_collectors[script_name] if script_name in coverage_collectors else null
 	if result:
 		result.maybe_process_queue()
+	else:
+		printerr("Unable to get coverage collector for %s" % [script_name])
+		print_stack()
+		printerr(ScriptCoverageCollector.add_line_numbers(load(script_name).get_source_code()))
 	return result
 
 
@@ -522,9 +530,10 @@ func _instrument_script(script: GDScript) -> void:
 	var coverage_script_path = get_script().resource_path
 
 	if !_excluded(script_path) && script_path && !script_path in coverage_collectors:
-		coverage_collectors[script_path] = ScriptCoverageCollector.new(
-			coverage_script_path, script_path
-		)
+		var cc := ScriptCoverageCollector.new(coverage_script_path, script_path)
+		coverage_collectors[script_path] = cc
+		# NOTE: if the script has _static_init we need to update the source code after adding the collector
+		cc.set_instrumented()
 		var deps = ResourceLoader.get_dependencies(script_path)
 		if len(deps) == 0:
 			# TODO: remove when this issue is resolved:
@@ -532,7 +541,9 @@ func _instrument_script(script: GDScript) -> void:
 			deps = _scan_script_for_dependencies(script_path, script.get_source_code())
 		for dep in deps:
 			if dep.get_extension() == "gd":
-				_instrument_script(load(dep))
+				var s = load(dep)
+				assert(s, "Unable to load depnedency %s" % [dep])
+				_instrument_script(s)
 
 
 func _scan_script_for_dependencies(script_path: String, source_code: String):
