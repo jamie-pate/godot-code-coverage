@@ -542,7 +542,7 @@ func _instrument_script(script: GDScript) -> void:
 		for dep in deps:
 			if dep.get_extension() == "gd":
 				var s = load(dep)
-				assert(s, "Unable to load depnedency %s" % [dep])
+				assert(s, "Unable to load dependency %s while instrumenting %s" % [dep, script_path])
 				_instrument_script(s)
 
 
