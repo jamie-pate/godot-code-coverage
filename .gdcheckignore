@@ -1,2 +1,5 @@
 contrib/Gut
 addons/gut
+
+# https://github.com/Scony/godot-gdscript-toolkit/issues/191
+other.gd

@@ -114,12 +114,92 @@ class ScriptCoverage:
 			add_line_coverage(line)
 		coverage_queue = []
 
+class BlockCounter:
+	var blocks :=  {"{}": 0, "()": 0, "[]": 0}
+	var lambda: BlockCounter = null
+
+	func _line_ends_with_lambda(line: String) -> bool:
+		if line.ends_with("):"):
+			var paren_count = 0
+			var map := {
+				"(": -1,
+				")": 1
+			}
+			for i in range(len(line) - 2, 4, -1):
+				paren_count += map.get(line[i], 0)
+				if paren_count == 0:
+					return line.substr(i - 4, 4) == "func"
+		return false
+
+	func _erase_string_literals(line: String) -> String:
+		# Ignoring multiline strings here .. probably need to deal with them at some point
+		var dq = "\""
+		var sq = "'"
+		var quote = ""
+		var escaped := false
+		var result = line
+		for i in len(line):
+			if quote:
+				if !escaped && line[i] == quote:
+					quote = ""
+				else:
+					result[i] = "_"
+				escaped = line[i] == "\\"
+			else:
+				if line[i] in [dq, sq]:
+					quote = line[i]
+		return result
+
+	func _merge_lambda():
+		for k in lambda.blocks:
+			blocks[k] += lambda.blocks[k]
+		lambda = null
+
+	## Normally returns 0, except when exiting a lambda block,
+	## then it contains the outer block's total
+	func update(line: String, ignore_lambda := false) -> int:
+		line = _erase_string_literals(line)
+		var line_ends_with_lambda := !ignore_lambda && _line_ends_with_lambda(line)
+		if line_ends_with_lambda && !lambda:
+			# next time we are called, we will defer to the nested lambda block
+			lambda = BlockCounter.new()
+		elif lambda:
+			lambda.update(line, line_ends_with_lambda)
+			# if lambda total is <0 it will be merged on the next pass.. but we need to know
+			# the block count of the outer block on this line
+			var t := lambda.get_total()
+			if t < 0:
+				t = get_total()
+				_merge_lambda()
+				return t
+			return 0
+		for key in blocks:
+			var block_count = line.count(key[0]) - line.count(key[1])
+			blocks[key] += block_count
+		return 0
+
+	func get_total() -> int:
+		if lambda:
+			var lr = lambda.get_total()
+			if lr >= 0:
+				return lr
+			pass
+		var result := 0
+		for key in blocks:
+			result += blocks[key]
+		return result
+
+	func _to_string():
+		if lambda:
+			return "%s l%s" % [blocks, lambda]
+		return str(blocks)
 
 class ScriptCoverageCollector:
 	extends ScriptCoverage
 
 	const DEBUG_SCRIPT_COVERAGE := false
 	const ERR_MAP := {43: "PARSE_ERROR"}
+	const LAMBDA_BLOCK = "func():"
 
 	var instrumented_source_code := ""
 	var covered_script: Script
@@ -198,17 +278,6 @@ class ScriptCoverageCollector:
 		var tab_token = stripped_line.get_slice("\t", skip)
 		return space_token if space_token && len(space_token) < len(tab_token) else tab_token
 
-	func _update_block_count(block_dict: Dictionary, line: String) -> void:
-		for key in block_dict:
-			var block_count = line.count(key[0]) - line.count(key[1])
-			block_dict[key] += block_count
-
-	func _count_block(block_dict: Dictionary) -> int:
-		var result := 0
-		for key in block_dict:
-			result += block_dict[key]
-		return result
-
 	func _get_leading_whitespace(line: String) -> String:
 		var leading_whitespace := PackedStringArray()
 		for chr in range(len(line)):
@@ -240,25 +309,35 @@ class ScriptCoverageCollector:
 		var out_lines := PackedStringArray()
 		# 0 based, start with -1 so that the first increment will give 0
 		var i := -1
-		var block := {"{}": 0, "()": 0, "[]": 0}
+		var block := BlockCounter.new()
 		# the collector var must be placed after 'extends' b
 		var continuation := false
 
 		for line in lines:
 			i += 1
+			var comment := ""
 			var stripped_line := line.strip_edges()
 			if stripped_line == "" || stripped_line.begins_with("#"):
+				if DEBUG_SCRIPT_COVERAGE:
+					var lws = _get_leading_whitespace(line)
+					out_lines.append("%s\t# empty skip: %s" % [lws, block])
 				out_lines.append(line)
 				continue
 			# if we are inside a block then block_count will be > 0, we can't insert instrumentation
-			var block_count := _count_block(block)
-			# update the block count ( '(', '{' and '[' characters create a block )
-			_update_block_count(block, stripped_line)
+			# except if it's a lambda, then we create a nested lambda block
+			var block_count := block.get_total()
+			# update the block count:
+			#  '(', '{' and '[' characters create a block
+			#  except if there's a lambda initialization (line matches /func(...):$/)
+			block_count += block.update(stripped_line)
 			# if we are in a block or have a continuation from the last line
 			# don't add instrumentation
 			var skip := block_count > 0 || continuation
 			continuation = stripped_line.ends_with("\\")
 			if skip:
+				if DEBUG_SCRIPT_COVERAGE:
+					var lws = _get_leading_whitespace(line)
+					out_lines.append("%s\t# early skip: %s %s" % [lws, block_count, block])
 				out_lines.append(line)
 				continue
 
@@ -333,8 +412,13 @@ class ScriptCoverageCollector:
 							]
 						)
 					)
+				if DEBUG_SCRIPT_COVERAGE:
+					comment += "%s %s" % [block_count, block]
+				comment = " # " + comment if comment else ""
 				coverage_lines[i] = 0
-				out_lines.append("%s%s.append(%s)" % [leading_whitespace, collector_var, i])
+				out_lines.append("%s%s.append(%s)%s" % [leading_whitespace, collector_var, i, comment])
+			elif DEBUG_SCRIPT_COVERAGE:
+				out_lines.append("%s\t# skip: %s state: %s" % [leading_whitespace, skip, state])
 			out_lines.append(line)
 		return "\n".join(out_lines)
 
@@ -542,7 +626,9 @@ func _instrument_script(script: GDScript) -> void:
 		for dep in deps:
 			if dep.get_extension() == "gd":
 				var s = load(dep)
-				assert(s, "Unable to load dependency %s while instrumenting %s" % [dep, script_path])
+				assert(
+					s, "Unable to load dependency %s while instrumenting %s" % [dep, script_path]
+				)
 				_instrument_script(s)
 
 
