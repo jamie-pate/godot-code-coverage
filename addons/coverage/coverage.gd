@@ -197,7 +197,7 @@ class BlockCounter:
 class ScriptCoverageCollector:
 	extends ScriptCoverage
 
-	const DEBUG_SCRIPT_COVERAGE := false
+	var DEBUG_SCRIPT_COVERAGE := false
 	const ERR_MAP := {43: "PARSE_ERROR"}
 	const LAMBDA_BLOCK = "func():"
 
@@ -219,11 +219,12 @@ class ScriptCoverageCollector:
 			state = _state
 			subclass_name = _subclass_name
 
-	func _init(coverage_script_path: String, _script_path: String) -> void:
-		super(_script_path, false)
+	func _init(coverage_script_path: String, script_path: String) -> void:
+		super(script_path, false)
+		#DEBUG_SCRIPT_COVERAGE = _script_path.match("*some_script.gd")
 		var id = last_script_id + 1
 		last_script_id = id
-		covered_script = load(_script_path)
+		covered_script = load(script_path)
 		source_code = covered_script.source_code
 		if DEBUG_SCRIPT_COVERAGE:
 			print(covered_script)
@@ -235,7 +236,7 @@ class ScriptCoverageCollector:
 			return
 		covered_script.source_code = new_source_code
 		if DEBUG_SCRIPT_COVERAGE:
-			print(covered_script.source_code)
+			print(add_line_numbers(covered_script.source_code))
 		# if we pass 'keep_state = true' to reload() then we can reload the script
 		# without removing it from all the nodes.
 		# this requires us to add a function call for each line that checks to make
@@ -291,7 +292,7 @@ class ScriptCoverageCollector:
 		coverage_script_path: String, script_resource_path: String
 	) -> String:
 		return (
-			'load("%s").instance.get_coverage_collector("%s")'
+			'preload("%s").instance.get_coverage_collector("%s")'
 			% [coverage_script_path, script_resource_path]
 		)
 
