@@ -1,13 +1,14 @@
-# Instrumentation Contract v1.2
+# Instrumentation Contract v1.4
 
 <!-- markdownlint-disable MD001 MD036 MD013 MD033 table-column-style -->
 
 *(Godot 4.x CLI Code Coverage Tool – Pure Source Instrumentor)*
 
 **Status**: Fully Implementation-Locked
-**Contract Version**: `1.2`
-**Date**: 2026-09-24
-**Changes from v1.1**: Resolved remaining ambiguities in disabled-instrumentation behaviour, template validation ordering, and `{path}` substitution safety.
+**Contract Version**: `1.4`
+**Date**: 2026-10-11
+**Changes from v1.2**: Golden-test artifact structure only (§13): one directory per corpus entry, and an optional `config.json` artifact for per-entry configuration overrides. No change to classification, mapping, metadata meaning, or error semantics. See §14.1.
+**Changes from v1.1 (in v1.2)**: Resolved remaining ambiguities in disabled-instrumentation behaviour, template validation ordering, and `{path}` substitution safety.
 
 ---
 
@@ -314,30 +315,84 @@ done
 
 ### 13. Golden-Test Artifacts
 
+Every corpus entry lives in its own directory. The artifact names below are fixed, so each entry's artifacts sit side by side in that directory without colliding with any other entry's:
+
+```text
+tests/corpus/
+  README.md
+  <entry>/
+    source.gd                  # all entries
+    config.json                # only if the entry overrides corpus defaults
+    expected.instrumented.gd   # success entries
+    expected.metadata.json     # success entries
+    expected_hits.json         # success entries
+    expected.error.json        # expected-failure entries
+```
+
+- **Directory name**: the Seed Corpus Specification's source filename without `.gd` (e.g. `basic_statements/` for `basic_statements.gd`).
+- **`.uid` sidecar**: `source.gd` keeps its Godot `.uid` sidecar beside it (`source.gd.uid`).
+- **Exercise mechanism**: whether success entries carry an `exercise.gd` (§13.1) or are exercised by the GUT integration suite is decided by the runtime Hit Collector design task (#23). This layout accommodates either.
+
 #### 13.1 Success entries
 
-| Artifact                   | Purpose                                                   |
-|----------------------------|-----------------------------------------------------------|
-| `source.gd`                | Original source                                           |
-| `expected.instrumented.gd` | Deterministic golden instrumented source                  |
-| `expected.metadata.json`   | Classification, mappings, executable lines, skipped lines |
-| `expected_hits.json`       | Runtime hit expectations                                  |
-| `exercise.gd`              | Script that exercises the known paths                     |
+| Artifact                   | Purpose                                                       |
+|----------------------------|---------------------------------------------------------------|
+| `source.gd`                | Original source                                               |
+| `config.json`              | *(optional)* Configuration overrides; see §13.3               |
+| `expected.instrumented.gd` | Deterministic golden instrumented source                      |
+| `expected.metadata.json`   | Classification, mappings, executable lines, skipped lines     |
+| `expected_hits.json`       | Runtime hit expectations                                      |
+| `exercise.gd`              | Script that exercises the known paths                         |
 
 #### 13.2 Expected-failure entries
 
 | Artifact              | Purpose                                                     |
 |-----------------------|-------------------------------------------------------------|
 | `source.gd`           | Original source                                             |
+| `config.json`         | *(optional)* Configuration overrides; see §13.3             |
 | `expected.error.json` | Expected `InstrumentationStatus`, `original_line`, `reason` |
+
+#### 13.3 `config.json`
+
+**Baseline.** The baseline for every `config.json` is the Seed Corpus Specification's default configuration, not the Contract §3 defaults. A `config.json` contains only the keys the entry overrides. An absent `config.json` means the corpus defaults apply unchanged.
+
+The corpus defaults differ from the Contract §3 defaults in two fields:
+
+| Field                     | Contract §3 default                                      | Seed Corpus Spec default     |
+|---------------------------|----------------------------------------------------------|------------------------------|
+| `enable_instrumentation`  | `true`                                                   | `true`                       |
+| `include_non_executable`  | `false`                                                  | **`true`**                   |
+| `emit_function_metadata`  | `true`                                                   | `true`                       |
+| `hit_recorder_expression` | *(none, which is `INVALID_CONFIGURATION` if left empty)* | **`__coverage_hit({line})`** |
+
+**Allowed keys.** Exactly the `InstrumentationConfig` fields of the current published contract (§3). An unknown key is an error, so a typo cannot silently fall back to a default.
+
+**Format.** A flat JSON object with LF line endings. Example, for `disabled_instrumentation/`:
+
+```json
+{
+  "enable_instrumentation": false
+}
+```
 
 ---
 
 ### 14. Versioning
 
-- Document version: **1.2**
-- Every successful `InstrumentationResult` exposes `contract_version = "1.2"`.
+- Document version: **1.4**
+- Every successful `InstrumentationResult` exposes `contract_version = "1.4"`.
 - Any change to classification, mapping, metadata meaning, unsupported-syntax behaviour, or instrumentation guarantees requires a new contract version.
+- Any change to golden-test artifact structure (§13) also requires a new contract version.
+
+#### 14.1 Version notes
+
+**v1.4** — golden-test artifact structure only:
+
+- §13: one directory per corpus entry, with fixed artifact names inside it.
+- §13.1, §13.2: `config.json` added as an optional artifact.
+- §13.3: `config.json` rules, with the Seed Corpus Specification's default configuration as the baseline.
+
+v1.4 makes **no change** to classification, mapping, metadata meaning, or error semantics. An instrumentor that satisfies v1.2 satisfies v1.4 once it reports `contract_version = "1.4"`.
 
 ---
 
@@ -349,6 +404,6 @@ This principle is non-negotiable.
 
 ---
 
-**End of Instrumentation Contract v1.2**
+**End of Instrumentation Contract v1.4**
 
 <!-- markdownlint-enable MD001 MD036 MD013 MD033 table-column-style -->

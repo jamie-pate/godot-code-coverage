@@ -1,19 +1,29 @@
-# Seed Corpus Specification v1.4
+# Seed Corpus Specification v1.5
 
 <!-- markdownlint-disable MD001 MD036 MD013 MD033 table-column-style -->
 
 *(Final – ready for materialization)*
 
-Both issues from v1.3 are corrected: line numbers have been re-counted against 
-the literal source blocks, and Sub-case A now uses a construct that genuinely 
-defeats a line-oriented stateful analyzer, with the failure mechanism named 
+**Matches**: Instrumentation Contract v1.4
+
+**Changes from v1.4**:
+
+- Per-entry directory layout and the `config.json` rule (see *Corpus layout*), matching Contract v1.4 §13.
+- The corpus default configuration is stated as the `config.json` baseline, including where it differs from the Contract §3 defaults.
+- `edge_cases.gd` is replaced by two entries, `edge_cases_unsupported_syntax.gd` and `edge_cases_invalid_config.gd`, with Sub-case B's source and invalid `hit_recorder_expression` value recorded.
+- Acceptance criteria updated for 12 corpus directories.
+- All source blocks and line numbers are otherwise unchanged. The line maps in this document stay authoritative, and the corpus files must match them byte for byte.
+
+**Changes from v1.3 (in v1.4)**: line numbers were re-counted against
+the literal source blocks, and Sub-case A now uses a construct that genuinely
+defeats a line-oriented stateful analyzer, with the failure mechanism named
 explicitly.
 
 ### Common conventions
 
 - Line numbers are 1-based.
 - All sources use Unix line endings (`\n` only).
-- Default configuration (unless overridden):
+- Default configuration (unless overridden by the entry's `config.json`):
 
 ```gdscript
  enable_instrumentation = true
@@ -21,9 +31,61 @@ explicitly.
  emit_function_metadata = true
  hit_recorder_expression = "__coverage_hit({line})"
 ```
-  
+
 - Success entries → Contract §13.1 artifacts.
 - Expected-failure entries → Contract §13.2 artifacts.
+
+### Corpus layout
+
+Every entry lives in its own directory under `tests/corpus/`:
+
+```text
+tests/corpus/
+  README.md
+  <entry>/
+    source.gd                  # all entries
+    config.json                # only if the entry overrides corpus defaults
+    expected.instrumented.gd   # success entries
+    expected.metadata.json     # success entries
+    expected_hits.json         # success entries
+    expected.error.json        # expected-failure entries
+```
+
+- **Directory name**: the entry's source filename in this document without `.gd` (e.g. `basic_statements/` for `basic_statements.gd`).
+- **`.uid` sidecar**: `source.gd` keeps its Godot `.uid` sidecar beside it (`source.gd.uid`).
+- **Exercise mechanism**: whether success entries carry an `exercise.gd` (Contract §13.1) or are exercised by the GUT integration suite is decided by the runtime Hit Collector design task (#23). This layout accommodates either.
+
+| # | Entry                              | Directory                         | Pipeline         | `config.json` |
+|---|------------------------------------|-----------------------------------|------------------|---------------|
+| 1 | `basic_statements.gd`              | `basic_statements/`               | Success          | none          |
+| 2 | `control_flow.gd`                  | `control_flow/`                   | Success          | none          |
+| 3 | `multiline.gd`                     | `multiline/`                      | Success          | none          |
+| 4 | `lambdas.gd`                       | `lambdas/`                        | Success          | none          |
+| 5 | `static_init.gd`                   | `static_init/`                    | Success          | none          |
+| 6 | `typed_annotations.gd`             | `typed_annotations/`              | Success          | none          |
+| 7 | `class_level.gd`                   | `class_level/`                    | Success          | none          |
+| 8 | `autoload_style.gd`                | `autoload_style/`                 | Success          | none          |
+| 9 | `await_coroutines.gd`              | `await_coroutines/`               | Success          | none          |
+| 10 | `disabled_instrumentation.gd`     | `disabled_instrumentation/`       | Success          | yes           |
+| 11 | `edge_cases_unsupported_syntax.gd` | `edge_cases_unsupported_syntax/` | Expected-failure | none          |
+| 12 | `edge_cases_invalid_config.gd`    | `edge_cases_invalid_config/`      | Expected-failure | yes           |
+
+#### `config.json`
+
+**Baseline.** The baseline for every `config.json` is the Seed Corpus Specification's default configuration, not the Contract §3 defaults. A `config.json` contains only the keys the entry overrides. An absent `config.json` means the corpus defaults apply unchanged.
+
+The corpus defaults differ from the Contract §3 defaults in two fields:
+
+| Field                     | Contract §3 default                                      | Seed Corpus Spec default     |
+|---------------------------|----------------------------------------------------------|------------------------------|
+| `enable_instrumentation`  | `true`                                                   | `true`                       |
+| `include_non_executable`  | `false`                                                  | **`true`**                   |
+| `emit_function_metadata`  | `true`                                                   | `true`                       |
+| `hit_recorder_expression` | *(none, which is `INVALID_CONFIGURATION` if left empty)* | **`__coverage_hit({line})`** |
+
+**Allowed keys.** Exactly the `InstrumentationConfig` fields of the current published contract (§3). An unknown key is an error, so a typo cannot silently fall back to a default.
+
+**Format.** A flat JSON object with LF line endings.
 
 **General classification rules**
 
@@ -229,6 +291,7 @@ func get_counter() -> int:
 ```
 
 **Mandatory classifications**:
+
 - `static var counter: int = 0` → executable (initializer present)
 - `static func _static_init() -> void:` → structural
 - Body of `_static_init` → executable
@@ -353,6 +416,7 @@ func _ready() -> void:
 ```
 
 **Mandatory classifications**:
+
 - `var ready_called := false` → executable
 - `_ready` header → structural
 - Body → executable
@@ -418,7 +482,16 @@ func run() -> void:
 Source identical to `basic_statements.gd`.
 Configuration override: `enable_instrumentation = false`.
 
+`config.json`:
+
+```json
+{
+  "enable_instrumentation": false
+}
+```
+
 **Golden assertions** (mandatory):
+
 - `instrumented_source` == original source
 - Every line appears in `line_mappings` with `hit_record_inserted = false`
 - `executable_lines` ∪ `skipped_lines` is a complete, non-overlapping partition of all original lines
@@ -426,12 +499,14 @@ Configuration override: `enable_instrumentation = false`.
 
 ---
 
-#### 11. `edge_cases.gd` (two sub-cases)
+#### 11. `edge_cases_unsupported_syntax.gd` (formerly `edge_cases.gd` Sub-case A)
 
 **Pipeline**: Expected-failure
 **Primary obligations**: fail-closed behaviour
 
 **Sub-case A – unsupported construct (concrete & justified)**
+
+`source.gd` is the block below, byte for byte. No `config.json` (corpus defaults apply).
 
 ```gdscript
 extends Node
@@ -450,10 +525,31 @@ The analyzer's indentation-based block tracker cannot distinguish the dedent tha
 
 `expected.error.json` asserts `UNSUPPORTED_SYNTAX` at the line containing the nested lambda definition (exact line number fixed when the file is written).
 
+---
+
+#### 12. `edge_cases_invalid_config.gd` (formerly `edge_cases.gd` Sub-case B)
+
+**Pipeline**: Expected-failure
+**Primary obligations**: fail-closed behaviour
+
 **Sub-case B – invalid configuration**
 
-Any valid source, but with an empty or unknown-placeholder `hit_recorder_expression`.
+**Source**: a byte-for-byte copy of `basic_statements.gd`. It is already known to be valid, and it is the same choice made for `disabled_instrumentation.gd`. Its content otherwise does not matter: configuration is validated before any line is analyzed, so `original_line` is `-1`.
+
+**Invalid value**: the unknown placeholder `__coverage_hit({column})`. An unknown placeholder exercises the placeholder validator rather than only an emptiness check (Contract §3.3).
+
+`config.json`:
+
+```json
+{
+  "hit_recorder_expression": "__coverage_hit({column})"
+}
+```
+
+> **Optional**: the empty-template case (`"hit_recorder_expression": ""`) is not covered by a required entry. Testing it would need a third entry (e.g. `edge_cases_empty_template.gd`) with the same source and `expected.error.json` shape.
+
 `expected.error.json` asserts:
+
 ```json
 {
   "status": "INVALID_CONFIGURATION",
@@ -481,13 +577,15 @@ Any valid source, but with an empty or unknown-placeholder `hit_recorder_express
 
 ### Acceptance Criteria
 
-- All 11 required entries pass their declared pipeline.
+- `tests/corpus/` contains exactly the 12 entry directories listed under *Corpus layout*, each holding the artifacts its pipeline requires.
+- All 12 required entries pass their declared pipeline.
+- `config.json` exists only in `disabled_instrumentation/` and `edge_cases_invalid_config/`, and contains only the keys listed for those entries above.
 - Every classification decision is unconditional and baked into the golden metadata.
 - Line numbers in every `FunctionMetadata` entry match the literal source blocks above.
 - The bare-declaration rule is tested in `basic_statements.gd`.
 - `await_coroutines.gd` is required, satisfying the §11 coroutine guarantee, and its heavier runtime cost is acknowledged.
-- Sub-case A of `edge_cases.gd` uses a construct whose failure mode is a named limitation of the line-oriented indentation/block tracker.
-- The `INVALID_CONFIGURATION` sub-case proves `original_line == -1`.
+- `edge_cases_unsupported_syntax.gd` (Sub-case A) uses a construct whose failure mode is a named limitation of the line-oriented indentation/block tracker.
+- `edge_cases_invalid_config.gd` (Sub-case B) proves `original_line == -1`.
 - All sources and goldens use Unix line endings only.
 
 The corpus is now fully determined and free of the previously identified arithmetic and justification errors. Ready to materialize the directory structure and concrete skeleton files under `tests/corpus/`.
