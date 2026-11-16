@@ -5,3 +5,9 @@
 /.godot
 /.idea
 project_structure.txt
+
+# Godot generates a .uid sidecar for every .gd it scans, including the
+# expected.*.gd goldens. Goldens are read as text and never loaded, so nothing
+# refers to them by UID; ignore the sidecars to avoid UID churn (#6, see
+# docs/corpus-golden-gd-verification.md).
+tests/corpus/**/expected.*.gd.uid
