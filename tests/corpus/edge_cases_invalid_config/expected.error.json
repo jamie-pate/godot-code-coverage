@@ -1,0 +1,5 @@
+{
+  "status": "INVALID_CONFIGURATION",
+  "original_line": -1,
+  "reason": "unknown placeholder {column} in hit_recorder_expression"
+}

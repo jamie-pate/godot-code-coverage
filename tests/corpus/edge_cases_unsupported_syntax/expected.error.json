@@ -1,0 +1,5 @@
+{
+  "status": "UNSUPPORTED_SYNTAX",
+  "original_line": 4,
+  "reason": "bracket continuation is not supported"
+}
