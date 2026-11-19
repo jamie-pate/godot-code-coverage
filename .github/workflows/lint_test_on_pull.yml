@@ -36,13 +36,11 @@ jobs:
       pull-requests: "read"
     outputs:
       gdscript: "${{ steps.filter.outputs.gdscript }}"
-      python_tests: "${{ steps.filter.outputs.python_tests }}"
       markdown: "${{ steps.filter.outputs.markdown }}"
       yaml: "${{ steps.filter.outputs.yaml }}"
       json: "${{ steps.filter.outputs.json }}"
-      ci: "${{ steps.filter.outputs.ci }}"
       # Called-workflow self-changes: a PR that edits one of these files alone
-      # doesn't touch any .gd/test/py path, so gdscript/python_tests stay false
+      # doesn't touch any .gd/test path, so gdscript stays false
       # and the job that runs *that* workflow gets skipped untested.
       gut_workflow: "${{ steps.filter.outputs.gut_workflow }}"
       # NOTE: a browser_workflow output was removed here. No browser-test
@@ -53,7 +51,7 @@ jobs:
       # erroring, which is worse than just not having it.
     steps:
       - name: "Checkout Code"
-        uses: "actions/checkout@v7.0.1"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"  # v7.0.1
         with:
           # Full history: needed so paths-filter's git-diff fallback (used
           # for non-pull_request events, or if the API call above is ever

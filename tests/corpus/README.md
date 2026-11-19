@@ -2,9 +2,9 @@
 
 This directory is the instrumentor's acceptance test suite: the 12 required
 entries of the
-[Seed Corpus Specification](../../docs/seed-corpus-specification-v1.5.md),
+[Seed Corpus Specification](../../docs/seed-corpus-specification-v1.6.md),
 with the golden artifacts each one must reproduce under the
-[Instrumentation Contract](../../docs/instrumentation-contract-v1.4.md)
+[Instrumentation Contract](../../docs/instrumentation-contract-v1.5.md)
 (§12, §13).
 
 > **Do not edit, reformat or re-save any file in this directory** unless the
@@ -74,10 +74,10 @@ Notes on individual artifacts:
   (Contract §12.2). Configuration validation (#9) must produce Sub-case B's
   string exactly.
 
-| Entry                             | `status`                  | `original_line`   | `reason`                                                    | Pinned in   |
-|-----------------------------------|---------------------------|-------------------|-------------------------------------------------------------|-------------|
-| `edge_cases_unsupported_syntax`   | `UNSUPPORTED_SYNTAX`      | `4`               | `"bracket continuation is not supported"`                   | #13         |
-| `edge_cases_invalid_config`       | `INVALID_CONFIGURATION`   | `-1`              | `"unknown placeholder {column} in hit_recorder_expression"` | #5          |
+| Entry                             | `status`                  | `original_line`   | `reason`                                                    | Pinned in                   |
+|-----------------------------------|---------------------------|-------------------|-------------------------------------------------------------|-----------------------------|
+| `edge_cases_unsupported_syntax`   | `UNSUPPORTED_SYNTAX`      | `4`               | `"bracket continuation is not supported"`                   | Contract v1.5 §4.1 (#13)    |
+| `edge_cases_invalid_config`       | `INVALID_CONFIGURATION`   | `-1`              | `"unknown placeholder {column} in hit_recorder_expression"` | Contract v1.5 §3.3 (#13)    |
 
 Line 4 of Sub-case A is where its unclosed bracket opens.
 
@@ -177,7 +177,6 @@ runtime Hit Collector design (#23) decides.
     strategy (#17, Epic #14). Their goldens are #28.
   - The hit-count schema for `expected_hits.json` is #23 (Epic #22). Its
     goldens are #29.
-  - Sub-case A's failure is explained in the spec as a lambda-dedent
-    ambiguity. #13 (Epic #8) replaces that with the bracket-continuation
-    refusal its `reason` already uses. If bracket continuation is ever
+  - Sub-case A fails through the bracket-continuation refusal (Contract
+    v1.5 §4.1), as its `reason` says. If bracket continuation is ever
     supported, Sub-case A stops failing and needs a new construct.

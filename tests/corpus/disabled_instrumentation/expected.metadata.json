@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.4",
+  "contract_version": "1.5",
   "line_mappings": [
     {"original_line": 1, "classification": "non_executable", "hit_record_inserted": false},
     {"original_line": 2, "classification": "structural", "hit_record_inserted": false},

@@ -4,6 +4,8 @@
 /coverage_out.json
 /.godot
 /.idea
+/.venv
+/.py_venv
 project_structure.txt
 
 # Godot generates a .uid sidecar for every .gd it scans, including the

@@ -15,7 +15,7 @@ const CORPUS_DIR = "res://tests/corpus"
 const SPEC_DIR = "res://docs"
 const SPEC_PREFIX = "seed-corpus-specification-v"
 const GOLDEN = "expected.metadata.json"
-const CONTRACT_VERSION = "1.4"
+const CONTRACT_VERSION = "1.5"
 
 const TOP_LEVEL_KEYS = [
 	"contract_version", "line_mappings", "executable_lines", "skipped_lines", "functions"

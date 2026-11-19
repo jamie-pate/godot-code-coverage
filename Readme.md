@@ -21,8 +21,8 @@ This project is moving to a different model: a **pure function** that takes GDSc
 
 The full behavioral contract for this instrumentor is specified in:
 
-- **[`docs/instrumentation-contract-v1.4.md`](docs/instrumentation-contract-v1.4.md)** — the frozen interface: input/output shapes, per-line classification rules (`executable` / `non_executable` / `structural`), determinism guarantees, and the fail-closed principle.
-- **[`docs/seed-corpus-specification-v1.5.md`](docs/seed-corpus-specification-v1.5.md)** — the golden-test corpus used to validate the instrumentor against the contract, serving as the strict acceptance test suite for Phase 1.
+- **[`docs/instrumentation-contract-v1.5.md`](docs/instrumentation-contract-v1.5.md)** — the frozen interface: input/output shapes, per-line classification rules (`executable` / `non_executable` / `structural`), determinism guarantees, and the fail-closed principle.
+- **[`docs/seed-corpus-specification-v1.6.md`](docs/seed-corpus-specification-v1.6.md)** — the golden-test corpus used to validate the instrumentor against the contract, serving as the strict acceptance test suite for Phase 1.
 
 ## Future Usage (Mockup)
 
@@ -43,10 +43,10 @@ godot --headless -s addons/coverage/cli.gd run-tests --export-lcov=coverage.info
 
 **Work in progress — the pure-source instrumentor is not yet implemented.**
 
-The Instrumentation Contract v1.4 and Seed Corpus Specification v1.5 are locked and implementation-ready.
+The Instrumentation Contract v1.5 and Seed Corpus Specification v1.6 are locked and implementation-ready.
 
-* [x] Define pure-source instrumentation contract v1.4
-* [x] Lock seed corpus specification v1.5
+* [x] Define pure-source instrumentation contract v1.5
+* [x] Lock seed corpus specification v1.6
 * [ ] Materialize seed corpus under `tests/corpus/`
 * [ ] Implement Source Analyzer / Line Classifier
 * [ ] Implement Instrumentation Transformer
